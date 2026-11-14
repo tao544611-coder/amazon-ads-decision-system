@@ -24,6 +24,8 @@ def env(tmp_path, monkeypatch):
     """隔离环境：独立 ADS_HOME → 迁移 → 导入方法论 v1.0.0。"""
     monkeypatch.setenv("ADS_HOME", str(tmp_path))
     monkeypatch.delenv("ADS_DB", raising=False)
+    # 领星 MCP 补充证据固定指向不存在目录：测试确定性与本机真实数据解耦
+    monkeypatch.setenv("ADS_LINGXING_MCP_RAW", str(tmp_path / "lingxing-missing"))
     config.ensure_dirs()
     ini = PROJECT_ROOT / "alembic.ini"
     cfg = Config(str(ini))
@@ -164,18 +166,18 @@ def approved_proposal(env):
         s.commit()
         update_profile(
             s, p.product_id,
-            {"A_basic": {"asin": "B0HB4XFV2F"}, "B_operations": {"target_acos": 0.25}},
+            {"A_basic": {"asin": "B0TEST0001"}, "B_operations": {"target_acos": 0.25}},
             reason="v1", changed_by="test",
         )
         s.commit()
-        map_campaign(s, campaign_id="29437742665971", product_id=p.product_id,
-                     mapped_by="test", campaign_name="GJHIUBKNGT-AZDAuto",
+        map_campaign(s, campaign_id="111111111111", product_id=p.product_id,
+                     mapped_by="test", campaign_name="TESTNGT-AZDAuto",
                      ad_product_type="sp")
         s.commit()
 
-    rows = sample_campaign_rows([mature_day], campaign_id="29437742665971")
+    rows = sample_campaign_rows([mature_day], campaign_id="111111111111")
     for r in rows:
-        r["Campaign Name"] = "GJHIUBKNGT-AZDAuto"
+        r["Campaign Name"] = "TESTNGT-AZDAuto"
     f = make_report(env / "shared_camp.csv", "campaign", rows)
     with session_scope() as s:
         r = ingest_file(s, f, data_as_of=today.isoformat())
@@ -202,7 +204,7 @@ def approved_proposal(env):
             select(MetricDaily).where(MetricDaily.grain == "campaign")
         ).first()
         proposal_dict = {
-            "sku": "6978", "target": "GJHIUBKNGT-AZDAuto",
+            "sku": "6978", "target": "TESTNGT-AZDAuto",
             "current_performance": "ACOS 30%", "problem": "高于目标",
             "fact_evidence_ids": [fact.id], "event_evidence_ids": [],
             "reasoning": "成熟期 ACOS 偏高",

@@ -540,7 +540,7 @@ class Evidence(Base):
         UniqueConstraint("analysis_run_id", "evidence_type", "ref_id", name="uq_evidence"),
         CheckConstraint(
             "evidence_type IN ('metric_daily','business_event','keyword_rank',"
-            "'methodology_rule','product_profile')",
+            "'methodology_rule','product_profile','lingxing_mcp_supplement')",
             name="evidence_type",
         ),
     )

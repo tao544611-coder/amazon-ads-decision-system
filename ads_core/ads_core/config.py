@@ -40,6 +40,21 @@ def db_path() -> Path:
     return db_dir() / "ads.sqlite"
 
 
+def lingxing_mcp_raw_root() -> Path:
+    """领星 MCP 周检原始数据根目录（D11 一期：分析侧补充证据，不进事实层）。
+
+    环境变量 ``ADS_LINGXING_MCP_RAW`` 优先；默认指向 Amazon_Work 周检链
+    ``projects/auto-ads-check/data/raw``（每周一自动落盘 <YYYY-Www>/）。
+    目录不存在时返回路径本身（调用方判 exists）。
+    """
+    override = os.environ.get("ADS_LINGXING_MCP_RAW")
+    if override:
+        return Path(override).resolve()
+    return Path(
+        r"D:\000GordonZou\Amazon_Work\projects\auto-ads-check\data\raw"
+    )
+
+
 def ensure_dirs() -> None:
     raw_dir().mkdir(parents=True, exist_ok=True)
     db_dir().mkdir(parents=True, exist_ok=True)

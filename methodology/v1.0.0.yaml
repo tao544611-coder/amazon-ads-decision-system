@@ -30,7 +30,7 @@ meta:
   reviewed_by: "Gordon（2026-11-14，F1–F5 审核决议）"
   approved_by: "Gordon（2026-11-14）"
   scope:
-    store: "昕信主店（profile 1531098959787693 / sid 17570）"
+    store: "主店铺（profile 1111111111111111 / sid 11111）"
     marketplace: "UK（Gordon 2026-11-14 确认 F2：全文金额均为 GBP £，首期 SKU 6978/6979 为 UK 站）"
     applies_to_skus: "Gordon 四位 SKU（白名单分组 6384 / 6978_6979 等）；首期验证范围 6978 / 6979"
     h1_boundary: "写广告/卖家后台的执行人永远是 Gordon；建议 ≠ 已批 ≠ 已执行"
@@ -46,7 +46,7 @@ meta:
       summary: "新增 §2.4 数据成熟度（结论层满窗 SP7/SB·SD14；未满标「未成熟观察」）；§2.3 环比成熟度对称；§3.2 第2条追加归因窗未满；§3.3 调 bid 样本门槛 30→20；估 CVR 未成熟日不进转化侧加权。周检取数窗仍 T-2"
   related_authoritative_decisions:   # §4 与近期定案的对齐（勿回退）
     - {id: A3, gist: "白名单≠店级；未布局；关键词 Top+零转化；店级锚附录"}
-    - {id: A4, gist: "昕信毛利 finance_page_list_msku + sid=17570，按 ASIN 聚合；与广告 spends 分列"}
+    - {id: A4, gist: "主店铺毛利 finance_page_list_msku + sid=11111，按 ASIN 聚合；与广告 spends 分列"}
     - {id: L19, gist: "白名单组花费并入归属 SB；禁把清单外 SB（GGBDWKAOP-BRJZ*）并入"}
     - {id: "L04/U01", gist: "6978 绿白移出；7 天/下期验组合 ACOS"}
     - {id: "2026-10-26 词级", gist: "保量控费：降价/词暂停/精否；不是 L16 整活动再停 Phrase，也不是 U03 原 A/B 否词包全做 → 挂 W44 验收"}
@@ -168,9 +168,9 @@ hard_rules:
       白名单组花费（L19 后）= 原 SP/SD（product 层）+ 归属该组的 SB；
       禁把清单外 SB（如 GGBDWKAOP-BRJZ*）并入。SP/SD-only 口径（如 W43 33.90%）
       与 L19 后含 SB 的 ACOS 禁止裸比，须分列或脚注。
-      利润侧 spend 用 A4：finance_page_list_msku · sids=[17570] 按 ASIN 进组，
+      利润侧 spend 用 A4：finance_page_list_msku · sids=[11111] 按 ASIN 进组，
       与广告 spends 分列；禁无 sid / 旧 6 位 MSKU 主路径。
-      「广告花费 vs 毛利/销售额」仅限同店（昕信 profile）同窗展示。
+      「广告花费 vs 毛利/销售额」仅限同店（主店铺 profile）同窗展示。
     source: {section: "§2.2", block: "d1e879ad-85a4-4563-b1c0-9bee8b47db82"}
     enforcement: ingest_gate
 
@@ -277,8 +277,8 @@ parameters:
     source: {section: "§3.5 / §1 第5条", blocks: ["e0ec762d-6a45-4dec-bb3b-c7097c245251", "73147d60-6b69-42ea-bd67-b2c526a74927"]}
 
   store_scope:
-    profile: "1531098959787693"        # 昕信主店
-    sids: [17570]
+    profile: "1111111111111111"        # 主店铺
+    sids: [11111]
     profit_source: "finance_page_list_msku（A4；按 ASIN 聚合，与广告 spends 分列）"
     source: {section: "页首口径与日期 / §2.2", block: "e2b639b4-2a88-4d61-98b3-733da80c2b6e"}
 
@@ -295,7 +295,7 @@ knowledge:
     title: 分层分析框架（§2.1）
     body: >-
       店级锚：同窗 ad_campaign_report（含清单外、SP/SB 结构）。
-      白名单雷达：products.md 分组（6384 / 6978_6979 等）≠ 昕信全店花费。
+      白名单雷达：products.md 分组（6384 / 6978_6979 等）≠ 主店铺全店花费。
       活动/色：结构问题（高效线顶预算 + 低效线仍烧）vs 单纯加预算。
       关键词/零转化：否词、暂停、降 bid 的证据层。
     source: {section: "§2.1", blocks: ["ce0c1d17-cca8-49ae-9936-3c4ea27edcd4", "6cff684b-1340-4371-99b0-4d33de26ba62", "fbef57b3-584a-4bad-a48a-a9783f755a3d", "f986baab-04c1-43e1-a474-33a849bc322d"]}
@@ -424,7 +424,7 @@ knowledge:
 asset_mapping:
   - {methodology_asset: "products.md 白名单分组（6384 / 6978_6979 等）", system_object: "ProductProfile.D 市场信息 + E 广告经营信息（分组归属字段）；阶段一由执行 Agent 依新环境重建初始档案"}
   - {methodology_asset: "box 事实表 reviews/ads-weekly-audit/facts/*.md", system_object: "facts 层 MetricSnapshot（分析上下文包必须引用事实批次，见 HR-19）；随真实报表导入重新累积，不迁移 box 历史文件"}
-  - {methodology_asset: "行动台账 products/ads-check/广告行动验证台账_昕信.md", system_object: "Action / Observation / Evaluation（阶段三实现后随流程产生）"}
+  - {methodology_asset: "行动台账 products/ads-check/广告行动验证台账_主店铺.md", system_object: "Action / Observation / Evaluation（阶段三实现后随流程产生）"}
   - {methodology_asset: "领星 MCP 取数", system_object: "外部数据来源层（源适配器之一，见架构 D11）"}
   - {methodology_asset: "apollo-ai-bid-skill 批量算价脚本", system_object: "阶段一不接入；仅备注边界（算出价只进待批，HR-17）"}
   - {methodology_asset: "chains/fact-then-judge.md §1 规程", system_object: "分析流程编排（ads_core.analysis）"}

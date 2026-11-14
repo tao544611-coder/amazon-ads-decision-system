@@ -16,8 +16,8 @@ echo "== 1. 方法论 v1.0.0 =="
 $ADS methodology import "../methodology/v1.0.0.yaml" --json < /dev/null | tail -1
 
 echo "== 2. 产品与档案 =="
-$ADS product add 6978 --asin B0HB4XFV2F --title "6978 电加热饭盒" --by "agent:zcode" --json < /dev/null | tail -1
-$ADS product add 6979 --asin B0H8YN7YX7 --title "6979 电加热饭盒" --by "agent:zcode" --json < /dev/null | tail -1
+$ADS product add 6978 --asin B0TEST0001 --title "6978 电加热饭盒" --by "agent:zcode" --json < /dev/null | tail -1
+$ADS product add 6979 --asin B0TEST0003 --title "6979 电加热饭盒" --by "agent:zcode" --json < /dev/null | tail -1
 $ADS product profile-update 6978 --file "../profiles/6978_profile_v1.yaml" \
   --reason "v1 初始建档（products.md + W46 facts 2026-11-12 + 行动台账）" --by "agent:zcode" --json < /dev/null | tail -1
 $ADS product profile-update 6979 --file "../profiles/6979_profile_v1.yaml" \
@@ -25,12 +25,12 @@ $ADS product profile-update 6979 --file "../profiles/6979_profile_v1.yaml" \
 
 echo "== 3. campaign 映射（6978_6979 组共用活动，挂 6978 待 Gordon 确认拆分口径）=="
 declare -A CMAP=(
-  [202499238611642]="GJHIUBKNGT-AJZCore Exact"
-  [116990224855579]="GJHIUBKNGT-ACZVehicle Phrase"
-  [183064418684129]="GJHIUBKNGT-ACZPortable Phrase"
-  [105889771836374]="GJHIUBKNGT-ACZOffice Phrase"
-  [210740798701013]="GJHIUBKNGT-ACZDriver Phrase"
-  [29437742665971]="GJHIUBKNGT-AZDAuto"
+  [555555555555]="TESTNGT-AJZCore Exact"
+  [333333333333]="TESTNGT-ACZVehicle Phrase"
+  [444444444444]="TESTNGT-ACZPortable Phrase"
+  [222222222222]="TESTNGT-ACZOffice Phrase"
+  [666666666666]="TESTNGT-ACZDriver Phrase"
+  [111111111111]="TESTNGT-AZDAuto"
 )
 for cid in "${!CMAP[@]}"; do
   $ADS product map-campaign 6978 "$cid" --name "${CMAP[$cid]}" --ad-product-type sp \

@@ -22,7 +22,7 @@
 3. 周检事实表目录：reviews/ads-weekly-audit/facts/ 整目录（*.md 事实文件）
 4. 词级处置复盘：2026-10-26_Gordon6978词级处置_思路与W44复盘点.md（reviews/ads-weekly-audit/ 下）
 5. 白名单分组文件：products.md（含分组 6384 / 6978_6979）
-6. 行动验证台账：广告行动验证台账_昕信.md（预期 products/ads-check/ 下）
+6. 行动验证台账：广告行动验证台账_主店铺.md（预期 products/ads-check/ 下）
 7. 规程链文件：chains/fact-then-judge.md、chains/file-landing.md
 8. 算价脚本包：apollo-ai-bid-skill/（含 scripts/，只要代码与说明，不要运行）
 9. ads-bid-scripts/（若存在）

@@ -8,6 +8,13 @@
 #   3) campaign/placement/target 的 negative 增加 advertised asin/sku，防止与
 #      advertised_product 并列满分；
 #   4) 领星中文报表与本地清洗派生 csv 不在本版覆盖范围（D11：后续增补适配器）。
+# 校准记录（O-1 增补 2，2026-11-14）：依 reports/广告投放报表 真实表头增补领星 ERP 适配（D11 一期）——
+#   5) 「每周投放报告-每日明细」（24 列中文，含「日期」列）经 report_variants 映射为
+#      target 类型进 can_target（混合 SP/SB 行由适配器按「类型」列逐行分派 ad_product_type）；
+#   6) 领星「汇总」版（关键词/广告位报告）无「日期」列，仍按设计拒绝（周期聚合口径，D11 二期再议）；
+#   7) 本地清洗派生 csv（snake_case 列）靠归一化下划线可被正确排除判定，
+#      但其「campaign」裸列名仍不满足 campaign name 组 → 维持 unknown（该数据与已导入的
+#      amazon_console 批次同源重复，无独立入账价值）。
 #
 # 结构约定：
 #   required:  必要列组列表；组内 any_of=命中任一即通过，all_of=全命中才通过
@@ -18,13 +25,15 @@
 
 version: 1
 
+# 领星 ERP 中文别名（映射进 metric 体系，供适配器取数；识别匹配用 report_variants 的字面列名）
+#   注：领星「点击」列无量词后缀、「花费/销售额」带「-本币」后缀；「销量」区分广告销量（units）
 metric_aliases:
-  impressions: ["impressions"]
-  clicks: ["clicks"]
-  spend: ["spend", "cost"]
-  orders: ["orders", "7 day total orders (#)", "14 day total orders (#)", "30 day total orders (#)"]
-  sales: ["sales", "7 day total sales", "14 day total sales", "30 day total sales"]
-  units: ["units", "7 day total units (#)", "14 day total units (#)", "30 day total units (#)"]
+  impressions: ["impressions", "曝光量"]
+  clicks: ["clicks", "点击", "点击量"]
+  spend: ["spend", "cost", "花费-本币", "花费", "花费-美元"]
+  orders: ["orders", "7 day total orders (#)", "14 day total orders (#)", "30 day total orders (#)", "广告订单"]
+  sales: ["sales", "7 day total sales", "14 day total sales", "30 day total sales", "广告销售额-本币", "广告销售额", "广告销售额-美元"]
+  units: ["units", "7 day total units (#)", "14 day total units (#)", "30 day total units (#)", "广告销量"]
 
 report_types:
   campaign:
@@ -113,6 +122,23 @@ report_types:
       - all_of: ["impressions", "clicks"]
       - any_of: ["spend", "cost"]
     distinguishing: []
+    negative: []
+
+# 报表类型变体（D11 源适配）：与 report_types 同规则打分，胜出后映射到 canonical 主类型。
+# 用途：同一 canonical 表收多源同构报表（如领星中文 target 行 → target 表）。
+#   maps_to:       命中后的 canonical report_type（必须存在于 report_types）
+#   其余字段（required/distinguishing/negative）与 report_types 语义一致，列名为字面归一化名
+report_variants:
+  lingxing_daily_target:
+    maps_to: target
+    required:
+      - any_of: ["日期"]
+      - any_of: ["广告活动"]
+      - any_of: ["投放"]
+      - all_of: ["曝光量", "点击"]
+      - any_of: ["花费-本币", "花费", "花费-美元"]
+    distinguishing:
+      - any_of: ["匹配方式"]
     negative: []
 
 # 置信阈值（设计 §2.3；无区分列配置的类型区分项视为满足，见 detector.py 实现注记）

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>广告决策审批门</title>
+<style>
+  :root { --green:#076853; --red:#c0392b; --amber:#b7791f; --line:#d9d9d6; --bg:#f7f6f2; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Microsoft YaHei",system-ui,sans-serif; background:var(--bg); color:#222; font-size:14px; }
+  header { background:var(--green); color:#fff; padding:14px 24px; display:flex; align-items:baseline; gap:16px; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  #stats { font-size:13px; opacity:.92; }
+  main { max-width:1080px; margin:0 auto; padding:16px 24px 60px; }
+  .banner { padding:10px 14px; border-radius:6px; margin:10px 0; display:none; }
+  .banner.err { background:#fdecea; color:var(--red); border:1px solid #f2c4bd; display:block; white-space:pre-wrap; }
+  .banner.warn { background:#fff8e6; color:var(--amber); border:1px solid #ecd9a0; display:block; }
+  .tabs { margin:14px 0 8px; }
+  .tabs button { border:1px solid var(--line); background:#fff; padding:6px 14px; cursor:pointer; border-radius:5px 5px 0 0; }
+  .tabs button.on { background:var(--green); color:#fff; border-color:var(--green); font-weight:600; }
+  table { width:100%; border-collapse:collapse; background:#fff; }
+  th,td { border:1px solid var(--line); padding:8px 10px; text-align:left; }
+  th { background:#eeece6; font-weight:600; white-space:nowrap; }
+  tbody tr { cursor:pointer; }
+  tbody tr:hover { background:#eef4f1; }
+  .st-pending_approval { color:var(--amber); font-weight:600; }
+  .st-approved,.st-approved_modified { color:var(--green); font-weight:600; }
+  .st-rejected { color:var(--red); font-weight:600; }
+  .st-deferred { color:#666; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:16px 20px; margin-top:14px; }
+  .card h2 { margin:2px 0 10px; font-size:16px; color:var(--green); }
+  .card h3 { margin:14px 0 4px; font-size:13px; color:#555; }
+  .kv { white-space:pre-wrap; line-height:1.7; }
+  .gap { background:#fdecea; color:var(--red); padding:8px 12px; border-radius:6px; margin:8px 0; }
+  .evi { color:#555; font-size:12px; word-break:break-all; }
+  .btnbar { margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; }
+  .btn { border:0; border-radius:6px; padding:9px 18px; cursor:pointer; font-size:14px; color:#fff; }
+  .btn.approve { background:var(--green); }
+  .btn.modify { background:#2c6fbb; }
+  .btn.reject { background:var(--red); }
+  .btn.defer { background:#777; }
+  .btn.ghost { background:#fff; color:#333; border:1px solid var(--line); }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .field { margin:10px 0; }
+  .field label { display:block; margin-bottom:4px; font-weight:600; }
+  .field input, .field textarea { width:100%; padding:8px; border:1px solid var(--line); border-radius:5px; font-family:inherit; font-size:14px; }
+  .hint { font-size:12px; color:#666; margin-top:3px; }
+  .hint.bad { color:var(--red); font-weight:600; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:9; }
+  .modal .box { background:#fff; border-radius:10px; max-width:680px; width:92%; max-height:86vh; overflow:auto; padding:20px 24px; }
+  .modal h2 { margin:0 0 12px; font-size:17px; }
+  .pre { background:#f4f3ef; border:1px solid var(--line); border-radius:6px; padding:10px; white-space:pre-wrap; word-break:break-all; font-size:12px; max-height:220px; overflow:auto; }
+  .recipt { border-left:4px solid var(--green); padding:8px 12px; background:#eef4f1; margin:10px 0; }
+  .muted { color:#888; font-size:12px; }
+</style>
+</head>
+<body>
+<header><h1>广告决策审批门</h1><div id="stats">加载中…</div></header>
+<main>
+  <div id="banner" class="banner"></div>
+  <div class="tabs" id="tabs">
+    <button data-tab="pending_approval" class="on">待批</button>
+    <button data-tab="approved">已批</button>
+    <button data-tab="rejected">已驳回</button>
+    <button data-tab="deferred">暂缓</button>
+    <button data-tab="all">全部</button>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>SKU</th><th>投放对象</th><th>动作类型</th><th>状态</th><th>入库时间</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p class="muted">点击行查看详情与决策；数据来自本地引擎 CLI，服务仅监听本机。</p>
+</main>
+
+<div class="modal" id="mDetail"><div class="box" id="dBox"></div></div>
+<div class="modal" id="mConfirm"><div class="box" id="cBox"></div></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let LIST = [], TAB = "pending_approval", CUR = null, CURTAB = "pending_approval";
+const ST_NAME = { pending_approval:"待批", approved:"已批", approved_modified:"修改后批准",
+                  rejected:"已驳回", deferred:"暂缓" };
+
+function banner(msg, cls) { const b = $("banner"); if (!msg) { b.className = "banner"; b.textContent = ""; return; } b.className = "banner " + cls; b.textContent = msg; }
+async function api(url, opt) {
+  const r = await fetch(url, opt);
+  const d = await r.json().catch(() => ({ error: "服务返回非 JSON" }));
+  if (!r.ok || d.error) throw new Error(d.error || ("HTTP " + r.status));
+  return d;
+}
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+
+async function loadList() {
+  banner();
+  LIST = (await api("/api/proposals")).proposals || [];
+  const n = k => LIST.filter(p => p.status === k).length;
+  $("stats").textContent = `待批 ${n("pending_approval")} · 已批 ${n("approved") + n("approved_modified")} · 已驳回 ${n("rejected")} · 暂缓 ${n("deferred")} · 共 ${LIST.length} 条`;
+  renderRows();
+}
+function renderRows() {
+  const rows = LIST.filter(p => TAB === "all" || p.status === TAB);
+  $("rows").innerHTML = rows.length ? rows.map((p, i) =>
+    `<tr onclick="openDetail('${p.id}')"><td>${i + 1}</td><td>${esc(p.sku)}</td><td>${esc(p.target)}</td>` +
+    `<td>${esc(p.action_type).slice(0, 30)}</td><td class="st-${p.status}">${ST_NAME[p.status] || p.status}</td>` +
+    `<td>${esc((p.created_at || "").replace("T", " ").slice(0, 16))}</td></tr>`).join("")
+    : `<tr><td colspan="6" style="color:#888">该状态下暂无提案</td></tr>`;
+}
+$("tabs").onclick = e => {
+  if (e.target.tagName !== "BUTTON") return;
+  TAB = e.target.dataset.tab;
+  [...$("tabs").children].forEach(b => b.classList.toggle("on", b === e.target));
+  renderRows();
+};
+
+function section(t, v) { return v ? `<h3>${t}</h3><div class="kv">${esc(v)}</div>` : ""; }
+
+async function openDetail(id) {
+  banner();
+  let d;
+  try { d = await api("/api/proposal/" + id); } catch (e) { return banner(e.message, "err"); }
+  CUR = d;
+  const p = d.payload || {}, f = d.run_flags || {}, bp = d.bid_params || {};
+  const pend = d.status === "pending_approval";
+  const evi = (p.fact_evidence_ids || []).concat(p.event_evidence_ids || []);
+  $("dBox").innerHTML = `
+    <h2>提案 ${esc(d.target)} <span class="muted">${esc(d.sku)} · ${ST_NAME[d.status]} · ${esc(d.created_at.slice(0, 16))}</span></h2>
+    ${f.needs_manual_attention && (f.data_gaps || []).length ? `<div class="gap">⚠ 数据缺口（引擎标注）：${esc((f.data_gaps || []).join("；"))}</div>` : ""}
+    ${section("当前表现", p.current_performance)}
+    ${section("问题", p.problem)}
+    ${section("理由", p.reasoning)}
+    ${section("动作", p.action)}
+    ${section("调整幅度", p.adjustment)}
+    ${section("预期效果", p.expected_effect)}
+    ${section("风险", p.risks)}
+    ${section("观察窗", p.observation_window)}
+    ${section("验收标准", p.acceptance_criteria)}
+    ${evi.length ? `<h3>证据引用</h3><div class="evi">${esc(evi.join("；"))}</div>` : ""}
+    ${(d.supplement_weeks || []).length ? `<h3>领星周检补充证据</h3><div class="evi">${esc(d.supplement_weeks.join("；"))}</div>` : ""}
+    ${(d.approvals || []).length ? `<h3>审批历史</h3><div class="evi">${esc(d.approvals.map(a => `${a.decided_at.slice(0, 16)} ${a.decided_by} → ${ST_NAME[a.decision] || a.decision}${a.self_approval ? "（自审批）" : ""}${a.comment ? "｜备注：" + a.comment : ""}`).join("\n"))}</div>` : ""}
+    ${(bp.max_single_change_pct != null) ? `<p class="muted">护栏参数：单次幅度 ≤±${bp.max_single_change_pct}%，出价 £${bp.uk_floor_gbp}~£${bp.uk_ceiling_gbp}，出价动作需点击 ≥${bp.min_clicks_for_bid_action}</p>` : ""}
+    ${pend ? `<div class="btnbar">
+        <button class="btn approve" onclick="decide('approve')">批 准</button>
+        <button class="btn modify" onclick="showModify()">修改批准</button>
+        <button class="btn reject" onclick="decide('reject')">驳 回</button>
+        <button class="btn defer" onclick="decide('defer')">暂 缓</button>
+        <button class="btn ghost" onclick="closeM('mDetail')">关 闭</button>
+      </div>` : `<div class="btnbar"><button class="btn ghost" onclick="closeM('mDetail')">关 闭</button></div>`}
+    <div id="modForm"></div>`;
+  $("mDetail").style.display = "flex";
+}
+function closeM(id) { $(id).style.display = "none"; if (id === "mDetail") CUR = null; }
+
+/* ---------- 修改批准表单 ---------- */
+function showModify() {
+  const bp = (CUR.bid_params || {}), p = CUR.payload || {};
+  const m = /(-?\d+(?:\.\d+)?)\s*%/.exec(p.adjustment || "");
+  const b = /£\s*(\d+(?:\.\d+)?)/.exec(p.adjustment || "");
+  $("modForm").innerHTML = `<div class="card" style="border-color:#2c6fbb">
+    <h2 style="color:#2c6fbb">修改批准（改完数字后批准，修改稿将作为终稿留痕）</h2>
+    <div class="field"><label>调整幅度（%）</label><input id="fPct" type="number" step="0.5" value="${m ? m[1] : ""}">
+      <div class="hint" id="hPct">单次幅度上限 ±${bp.max_single_change_pct}%</div></div>
+    <div class="field"><label>目标出价（£）</label><input id="fBid" type="number" step="0.01" value="${b ? b[1] : ""}">
+      <div class="hint" id="hBid">允许区间 £${bp.uk_floor_gbp} ~ £${bp.uk_ceiling_gbp}</div></div>
+    <div class="field"><label>修改说明（必填，写入审批备注）</label><textarea id="fNote" rows="2"></textarea></div>
+    <div class="btnbar"><button class="btn modify" onclick="submitModify()">生成修改稿并继续</button>
+      <button class="btn ghost" onclick="$('modForm').innerHTML=''">取 消</button></div></div>`;
+  $("fPct").oninput = liveCheck; $("fBid").oninput = liveCheck;
+}
+function liveCheck() {
+  const bp = CUR.bid_params || {};
+  const pct = parseFloat($("fPct").value), bid = parseFloat($("fBid").value);
+  let okP = true, okB = true;
+  if (!isNaN(pct)) {
+    okP = Math.abs(pct) <= bp.max_single_change_pct;
+    $("hPct").className = "hint" + (okP ? "" : " bad");
+    $("hPct").textContent = okP ? `单次幅度上限 ±${bp.max_single_change_pct}%` : `✗ 超出 ±${bp.max_single_change_pct}% 上限，引擎将拒绝`;
+  } else $("hPct").className = "hint";
+  if (!isNaN(bid)) {
+    okB = bid >= bp.uk_floor_gbp && bid <= bp.uk_ceiling_gbp;
+    $("hBid").className = "hint" + (okB ? "" : " bad");
+    $("hBid").textContent = okB ? `允许区间 £${bp.uk_floor_gbp} ~ £${bp.uk_ceiling_gbp}` : `✗ 超出 £${bp.uk_floor_gbp}~£${bp.uk_ceiling_gbp}，引擎将拒绝`;
+  } else $("hBid").className = "hint";
+  return okP && okB && !isNaN(pct) && !isNaN(bid);
+}
+function submitModify() {
+  const note = $("fNote").value.trim();
+  if (!note) return banner("修改批准必须填写修改说明", "err");
+  if (!liveCheck()) return banner("修改稿超出护栏参数，请先改正", "err");
+  const pct = parseFloat($("fPct").value), bid = parseFloat($("fBid").value);
+  const modified = { ...CUR.payload, adjustment: `调整幅度 ${pct > 0 ? "+" : ""}${pct}%，目标出价 £${bid.toFixed(2)}（修改批准终稿）`, modification_note: note };
+  confirmThen("modify", note, modified);
+}
+
+/* ---------- 决策与确认 ---------- */
+function decide(kind) {
+  if (kind === "modify") return;           // 走 showModify 表单
+  const note = kind === "approve" ? "" : null; // reject/defer 必填 → null 提示
+  confirmThen(kind, note, null);
+}
+function confirmThen(kind, note, modified) {
+  banner();
+  const names = { approve: "批准", modify: "修改批准", reject: "驳回", defer: "暂缓" };
+  const needNote = kind === "reject" || kind === "defer";
+  const box = $("cBox");
+  const commentHtml = needNote
+    ? `<div class="field"><label>备注（必填：裁决要有理由）</label><textarea id="cNote" rows="2"></textarea></div>`
+    : `<div class="field"><label>备注（可选）</label><textarea id="cNote" rows="2">${esc(note && note !== "" ? note : "")}</textarea></div>`;
+  box.innerHTML = `
+    <h2>确认${names[kind]}</h2>
+    <p>提案：<b>${esc(CUR.target)}</b>（${esc(CUR.sku)}）</p>
+    ${kind === "modify" ? `<p>修改稿调整幅度：<b>${esc(modified.adjustment)}</b></p><p class="muted">修改说明：${esc(modified.modification_note)}</p>` : ""}
+    ${commentHtml}
+    <p class="muted">将写入：审批人 Gordon · 决策 ${names[kind]} · 留痕 audit_log（审批与执行分离，批准后可另建待执行动作）</p>
+    <div class="btnbar"><button class="btn approve" id="cGo">确认写入</button>
+      <button class="btn ghost" onclick="closeM('mConfirm')">返 回</button></div>`;
+  $("mConfirm").style.display = "flex";
+  if (needNote) $("cNote").value = (typeof note === "string" && note) ? note : "";
+  $("cGo").onclick = async () => {
+    const comment = $("cNote").value.trim();
+    if (needNote && !comment) return banner("驳回/暂缓必须填写备注", "err");
+    $("cGo").disabled = true;
+    try {
+      const body = { proposal_id: CUR.id, decision: kind, comment };
+      if (kind === "modify") body.modified = modified;
+      const r = await api("/api/decide", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      closeM("mConfirm"); closeM("mDetail");
+      await receipt(r, kind);
+    } catch (e) { $("cGo").disabled = false; banner(e.message, "err"); }
+  };
+}
+async function receipt(r, kind) {
+  const box = $("cBox");
+  box.innerHTML = `
+    <h2>✅ 已写入</h2>
+    <div class="recipt">审批记录 ID：${esc(r.approval_id || "")}<br>
+      决策：${ST_NAME[r.decision] || r.decision}${r.self_approval ? "　<span style='color:var(--red)'>⚠ 自审批标记</span>" : ""}</div>
+    ${(kind === "approve" || kind === "modify") ? `
+      <p>是否现在生成待执行动作？（manual 模式留痕；实际执行待领星通道恢复后由 AI 会话代执行）</p>
+      <div class="btnbar"><button class="btn approve" id="aGo">生成待执行动作</button>
+        <button class="btn ghost" onclick="closeM('mConfirm')">暂不生成</button></div><div id="aOut"></div>` : ""}
+    <div class="btnbar"><button class="btn ghost" onclick="closeM('mConfirm');loadList()">关 闭</button></div>`;
+  $("mConfirm").style.display = "flex";
+  const go = $("aGo");
+  if (go) go.onclick = async () => {
+    go.disabled = true;
+    try {
+      const a = await api("/api/action", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proposal_id: r.proposal_id }) });
+      $("aOut").innerHTML = `<div class="recipt">动作 ID：${esc(a.action_id || "")}　状态：${esc(a.status || "")}${a.created ? "" : "（已存在，幂等返回）"}</div>`;
+    } catch (e) { $("aOut").innerHTML = `<div class="gap">生成动作失败：${esc(e.message)}</div>`; }
+  };
+}
+
+loadList().catch(e => banner("加载失败：" + e.message, "err"));
+</script>
+</body>
+</html>

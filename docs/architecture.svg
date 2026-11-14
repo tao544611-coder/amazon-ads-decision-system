@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 880" font-family="'Microsoft YaHei', 'PingFang SC', sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5a6b62"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#076853"/>
+    </marker>
+  </defs>
+  <style>
+    .band { fill:#f4f3ef; stroke:#c9c7c0; rx:10; }
+    .box  { fill:#ffffff; stroke:#8a978f; stroke-width:1.2; }
+    .boxG { fill:#eef4f1; stroke:#076853; stroke-width:1.4; }
+    .boxR { fill:#fdf1ee; stroke:#a4552f; stroke-width:1.4; stroke-dasharray:5 3; }
+    .flow { stroke:#5a6b62; stroke-width:1.6; fill:none; marker-end:url(#arrow); }
+    .flowG{ stroke:#076853; stroke-width:1.8; fill:none; marker-end:url(#arrowRed); }
+    .t1 { font-size:15px; font-weight:700; fill:#076853; }
+    .t2 { font-size:13px; font-weight:700; fill:#2e3a34; }
+    .t3 { font-size:11.5px; fill:#55605a; }
+    .t4 { font-size:10.5px; fill:#7a837d; }
+    .tag{ font-size:10px; fill:#ffffff; font-weight:700; }
+  </style>
+
+  <rect x="0" y="0" width="1040" height="880" fill="#fbfaf7"/>
+  <text x="30" y="38" class="t1" font-size="19">Amazon Ads Decision System · 架构图 v0.1</text>
+  <text x="30" y="60" class="t4">引擎确定性 · 判断可追溯 · AI 在引擎外（D3）· 事实层禁读源报表（D11）</text>
+
+  <!-- 数据源 -->
+  <rect x="30" y="80" width="470" height="70" class="band" rx="10"/>
+  <text x="50" y="102" class="t2">数据源（原始数据 · 全量 gitignore 不入库）</text>
+  <rect x="45" y="112" width="135" height="26" class="box" rx="5"/><text x="112" y="129" class="t3" text-anchor="middle">亚马逊后台 bulk 报表</text>
+  <rect x="197" y="112" width="135" height="26" class="box" rx="5"/><text x="264" y="129" class="t3" text-anchor="middle">领星 ERP 每日明细</text>
+  <rect x="349" y="112" width="135" height="26" class="box" rx="5"/><text x="416" y="129" class="t3" text-anchor="middle">领星 MCP 周检 JSON</text>
+
+  <!-- 源适配器 -->
+  <rect x="30" y="170" width="470" height="64" class="boxG" rx="10"/>
+  <text x="50" y="192" class="t2" fill="#076853">源适配器层（D11：一源一适配器）</text>
+  <rect x="45" y="200" width="160" height="24" class="box" rx="5"/><text x="125" y="216" class="t3" text-anchor="middle">amazon_console 适配器</text>
+  <rect x="222" y="200" width="160" height="24" class="box" rx="5"/><text x="302" y="216" class="t3" text-anchor="middle">lingxing_erp 适配器</text>
+  <text x="405" y="216" class="t3">指纹识别 · QF-01</text>
+
+  <!-- 导入质检 -->
+  <rect x="30" y="254" width="470" height="54" class="box" rx="10"/>
+  <text x="50" y="276" class="t2">导入质检 QF-01~06 · 批次状态机（幂等 D6 · hash 去重）</text>
+  <text x="50" y="296" class="t3">识别→登记→质检→QF-08 supersede→终态：complete / needs_confirm / failed</text>
+
+  <!-- canonical -->
+  <rect x="30" y="328" width="470" height="68" class="boxG" rx="10"/>
+  <text x="50" y="350" class="t2" fill="#076853">canonical 统一层（唯一汇合点）</text>
+  <text x="50" y="368" class="t3">campaign / adgroup / target / searchterm / placement /</text>
+  <text x="50" y="384" class="t3">advertised_product / purchased_product 七张日报表 + source_lineage</text>
+
+  <!-- 事实层 -->
+  <rect x="30" y="412" width="470" height="56" class="box" rx="10"/>
+  <text x="50" y="434" class="t2">事实层 MetricDaily（只从 canonical 构建）</text>
+  <text x="50" y="454" class="t3">成熟度 HR-01/02 天窗（SP≥7 · SB/SD≥14）· 四种粒度</text>
+
+  <!-- 分析上下文 -->
+  <rect x="30" y="488" width="470" height="56" class="box" rx="10"/>
+  <text x="50" y="510" class="t2">分析上下文组装（PRD 4.7 · 冻结快照 + 证据登记 T5）</text>
+  <text x="50" y="530" class="t3">七步确定性组装 · 领星 MCP 周检数据作补充证据段（周期口径不进事实层）</text>
+
+  <!-- AI 判断层（引擎外） -->
+  <rect x="30" y="564" width="470" height="76" class="boxR" rx="10"/>
+  <text x="50" y="588" class="t2" fill="#a4552f">AI 判断层（引擎外 · 任意 LLM/Agent 接入）</text>
+  <text x="50" y="608" class="t3">读上下文包 → 出建议（14 必填字段）→ 三关校验 D4：</text>
+  <text x="50" y="626" class="t3">Schema14 → VR 硬规则（±15% / £0.10~2.00 / 点击≥20）→ EV 证据关</text>
+
+  <!-- 左列层间箭头 -->
+  <path d="M265,152 L265,166" class="flow"/>
+  <path d="M265,236 L265,250" class="flow"/>
+  <path d="M265,310 L265,324" class="flow"/>
+  <path d="M265,398 L265,408" class="flow"/>
+  <path d="M265,470 L265,484" class="flow"/>
+
+  <!-- 右列：决策链 -->
+  <rect x="540" y="80" width="470" height="560" class="band" rx="10"/>
+  <text x="560" y="104" class="t1" font-size="15">决策链（阶段三~五 · 七表闭环）</text>
+
+  <rect x="560" y="120" width="200" height="40" class="box" rx="6"/><text x="660" y="138" class="t2" text-anchor="middle">提案 Proposal</text><text x="660" y="154" class="t4" text-anchor="middle">pending_approval</text>
+  <rect x="810" y="120" width="180" height="40" class="boxG" rx="6"/><text x="900" y="138" class="t2" text-anchor="middle" fill="#076853">Web 审批门（人工）</text><text x="900" y="154" class="t4" text-anchor="middle">批准/修改/驳回/暂缓</text>
+  <path d="M760,140 L805,140" class="flowG"/>
+
+  <rect x="560" y="185" width="200" height="40" class="box" rx="6"/><text x="660" y="203" class="t2" text-anchor="middle">动作 Action（T6 分离）</text><text x="660" y="219" class="t4" text-anchor="middle">审批后另行生成 · 幂等键</text>
+  <path d="M900,160 L900,180 L759,180" class="flowG"/>
+  <rect x="810" y="185" width="180" height="40" class="box" rx="6"/><text x="900" y="203" class="t2" text-anchor="middle">领星 MCP 执行（agent）</text><text x="900" y="219" class="t4" text-anchor="middle">对象核对硬闸 · SOP 七步</text>
+  <path d="M760,205 L805,205" class="flowG"/>
+
+  <rect x="560" y="250" width="200" height="40" class="box" rx="6"/><text x="660" y="268" class="t2" text-anchor="middle">执行回执 Receipt（T8）</text><text x="660" y="284" class="t4" text-anchor="middle">before/after/raw · unknown 不盲重</text>
+  <path d="M900,225 L900,245 L759,245" class="flowG"/>
+  <rect x="810" y="250" width="180" height="40" class="box" rx="6"/><text x="900" y="268" class="t2" text-anchor="middle">观察 Observation</text><text x="900" y="284" class="t4" text-anchor="middle">观察窗周检追踪</text>
+  <path d="M760,270 L805,270" class="flow"/>
+
+  <rect x="560" y="315" width="200" height="40" class="box" rx="6"/><text x="660" y="333" class="t2" text-anchor="middle">验收 Evaluation</text><text x="660" y="349" class="t4" text-anchor="middle">T+7 裁决 · 有效率统计</text>
+  <path d="M900,290 L900,310 L759,310" class="flow"/>
+  <rect x="810" y="315" width="180" height="40" class="box" rx="6"/><text x="900" y="333" class="t2" text-anchor="middle">经验库 Experience</text><text x="900" y="349" class="t4" text-anchor="middle">FTS5 检索 · 进上下文包</text>
+  <path d="M760,335 L805,335" class="flow"/>
+  <path d="M900,355 L900,372 L530,372 L530,516 L504,516" class="flow" stroke-dasharray="4 3"/>
+  <text x="700" y="366" class="t4" text-anchor="middle">经验回流下一次分析</text>
+
+  <!-- 审计与守卫 -->
+  <rect x="560" y="405" width="430" height="52" class="box" rx="8"/>
+  <text x="578" y="426" class="t2">守卫 G1~G6 + 审计 AuditLog（全操作留痕）</text>
+  <text x="578" y="446" class="t3">调用面标识 actor（cli / webgate / mcp）· 自审批留痕 · 导入幂等 D6</text>
+
+  <!-- 数据库 -->
+  <rect x="560" y="475" width="430" height="52" class="box" rx="8"/>
+  <text x="578" y="496" class="t2">SQLite + Alembic 迁移 004（不可变触发器）</text>
+  <text x="578" y="516" class="t3">20+ 张业务表 · decisions 7 表 · evidence 证据 · audit 日志</text>
+
+  <!-- 接入面 -->
+  <rect x="560" y="545" width="430" height="80" class="boxG" rx="8"/>
+  <text x="578" y="566" class="t2" fill="#076853">仅有的两个接入面（Q1/D1）</text>
+  <rect x="575" y="578" width="195" height="34" class="box" rx="5"/><text x="672" y="592" class="t3" text-anchor="middle">CLI（--json 全命令）</text><text x="672" y="606" class="t4" text-anchor="middle">ingest · analysis · proposal · action …</text>
+  <rect x="785" y="578" width="195" height="34" class="box" rx="5"/><text x="882" y="592" class="t3" text-anchor="middle">MCP Server（fastmcp）</text><text x="882" y="606" class="t4" text-anchor="middle">三级权限 9 / 13 / 21 个工具</text>
+
+  <!-- 左列到右列的连接 -->
+  <path d="M500,600 L548,600 L548,140 L556,140" class="flow"/>
+  <text x="520" y="592" class="t4" text-anchor="middle">建议</text>
+
+  <!-- 底部安全带 -->
+  <rect x="30" y="672" width="980" height="70" class="band" rx="10"/>
+  <text x="50" y="696" class="t2">数据安全（公开仓库约定）</text>
+  <text x="50" y="716" class="t3">data/、samples/、样本包、profiles/、HANDOFF.md 全量 gitignore 不入库 · 密钥永不进代码/提交/日志 · 文档与测试已脱敏（店铺别名 / sid / profile / ASIN / 活动 ID → 占位值）</text>
+  <text x="50" y="734" class="t3">审计留痕：每次导入/构建/校验/审批/执行写入 audit_log，来源 actor 可区分（cli / webgate / mcp / agent）</text>
+
+  <!-- 底部版本 -->
+  <rect x="30" y="760" width="980" height="86" class="band" rx="10"/>
+  <text x="50" y="786" class="t2">v0.1 交付范围（2026-11-14）</text>
+  <text x="50" y="806" class="t3">T1~T8 引擎侧 78 用例 · D11 一期（领星 ERP 中文指纹 + 下划线归一 + MCP 补充证据）· Web 审批门（批准/修改批准/驳回/暂缓 + 二次确认）</text>
+  <text x="50" y="824" class="t3">领星执行通道实测通过（否定词全流程）· 领星操作日志双快照验证 · 需求单：出价/预算类工具（P1）待领星补齐 · 累计 89 用例全绿</text>
+</svg>

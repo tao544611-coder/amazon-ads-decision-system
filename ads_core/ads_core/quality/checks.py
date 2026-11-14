@@ -51,26 +51,29 @@ def _first_col(norm_row: dict[str, str], candidates: list[str]) -> str:
 
 
 def _business_key_for(report_type: str, row: dict[str, str]) -> str:
-    campaign = _first_col(row, ["campaign id", "campaign name"])
-    adgroup = _first_col(row, ["ad group id", "ad group name"])
-    target = _first_col(row, ["keyword or product targeting", "targeting"])
+    # 校准（O-1 增补 2）：领星中文列（D11 一期）与英文列同权参与业务键
+    campaign = _first_col(row, ["campaign id", "campaign name", "广告活动"])
+    adgroup = _first_col(row, ["ad group id", "ad group name", "广告组"])
+    target = _first_col(row, ["keyword or product targeting", "targeting", "投放"])
+    # 校准（O-1 增补 2）：日期列含领星中文「日期」（importer._data_dates 已同权支持）
+    date_val = _first_col(row, ["date", "start date", "日期"])
     key_cols = {
-        "campaign": [row.get("date", ""), campaign],
-        "adgroup": [row.get("date", ""), campaign, adgroup],
-        "target": [row.get("date", ""), campaign, adgroup, target],
+        "campaign": [date_val, campaign],
+        "adgroup": [date_val, campaign, adgroup],
+        "target": [date_val, campaign, adgroup, target],
         # 校准（真实样本 20261112）：搜索词键需含 target 维度、商品键需含 SKU 维度，
         # 否则真实数据中同词跨 target / 同 ASIN 多 SKU 会被误判重复（QF-02 误报）
-        "searchterm": [row.get("date", ""), campaign, adgroup, target,
+        "searchterm": [date_val, campaign, adgroup, target,
                        row.get("customer search term", "")],
-        "placement": [row.get("date", ""), campaign, row.get("placement", "")],
-        "advertised_product": [row.get("date", ""), campaign, adgroup,
+        "placement": [date_val, campaign, row.get("placement", "")],
+        "advertised_product": [date_val, campaign, adgroup,
                                _first_col(row, ["advertised asin", "asin"]),
                                row.get("advertised sku", "")],
-        "purchased_product": [row.get("date", ""), campaign, adgroup,
+        "purchased_product": [date_val, campaign, adgroup,
                               row.get("advertised asin", ""),
                               row.get("advertised sku", ""),
                               _first_col(row, ["purchased asin", "other asin"])],
-    }.get(report_type, [row.get("date", ""), campaign])
+    }.get(report_type, [date_val, campaign])
     return "|".join(key_cols)
 
 

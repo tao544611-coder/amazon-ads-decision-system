@@ -35,25 +35,25 @@ MATURE_DAY = (TODAY - timedelta(days=10)).isoformat()   # SP lag=10 ≥7 成熟
 IMMATURE_DAY = (TODAY - timedelta(days=2)).isoformat()  # lag=2 未成熟
 DATE_FROM = (TODAY - timedelta(days=30)).isoformat()
 DATE_TO = TODAY.isoformat()
-CAMPAIGN_NAME = "GJHIUBKNGT-AZDAuto"
-LOW_CLICK_CAMPAIGN = "GJHIUBKNGT-ACZOffice Phrase"      # clicks=8 < 20（VR-04 素材）
+CAMPAIGN_NAME = "TESTNGT-AZDAuto"
+LOW_CLICK_CAMPAIGN = "TESTNGT-ACZOffice Phrase"      # clicks=8 < 20（VR-04 素材）
 
 
 @pytest.fixture()
 def stage2_env(env):
     """产品+档案+映射+成熟/未成熟事实行+低点击行+活跃事件+两次排名快照。"""
     with session_scope() as s:
-        p = upsert_product(s, sku="6978", asin="B0HB4XFV2F", actor="test")
+        p = upsert_product(s, sku="6978", asin="B0TEST0001", actor="test")
         s.commit()
         update_profile(
             s, p.product_id,
-            {"A_basic": {"asin": "B0HB4XFV2F"}, "B_operations": {"target_acos": 0.25}},
+            {"A_basic": {"asin": "B0TEST0001"}, "B_operations": {"target_acos": 0.25}},
             reason="v1", changed_by="test",
         )
         s.commit()
-        map_campaign(s, campaign_id="29437742665971", product_id=p.product_id,
+        map_campaign(s, campaign_id="111111111111", product_id=p.product_id,
                      mapped_by="test", campaign_name=CAMPAIGN_NAME, ad_product_type="sp")
-        map_campaign(s, campaign_id="105889771836374", product_id=p.product_id,
+        map_campaign(s, campaign_id="222222222222", product_id=p.product_id,
                      mapped_by="test", campaign_name=LOW_CLICK_CAMPAIGN, ad_product_type="sp")
         s.commit()
         add_business_event(
@@ -69,10 +69,10 @@ def stage2_env(env):
                          recorded_by="Gordon", organic_rank=5)
         s.commit()
 
-    rows = sample_campaign_rows([MATURE_DAY, IMMATURE_DAY], campaign_id="29437742665971")
+    rows = sample_campaign_rows([MATURE_DAY, IMMATURE_DAY], campaign_id="111111111111")
     for r in rows:
         r["Campaign Name"] = CAMPAIGN_NAME
-    low_rows = sample_campaign_rows([MATURE_DAY], campaign_id="105889771836374")
+    low_rows = sample_campaign_rows([MATURE_DAY], campaign_id="222222222222")
     for r in low_rows:
         r["Campaign Name"] = LOW_CLICK_CAMPAIGN
         r["Clicks"] = "8"  # < min_clicks_for_bid_action(20)

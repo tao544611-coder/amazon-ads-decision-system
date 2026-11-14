@@ -650,10 +650,63 @@ def proposal_list(
             stmt = stmt.where(Proposal.status == status)
         rows = [
             {"id": p.id, "sku": p.sku, "target": p.target, "action_type": p.action_type,
-             "status": p.status, "analysis_run_id": p.analysis_run_id}
+             "status": p.status, "analysis_run_id": p.analysis_run_id,
+             "created_by": p.created_by, "created_at": p.created_at}
             for p in s.scalars(stmt).all()
         ]
     _emit({"proposals": rows, "count": len(rows)}, json_out)
+
+
+@proposal_app.command("show")
+def proposal_show(
+    proposal_id: str,
+    json_out: JSON_OPT = False,
+) -> None:
+    """提案详情：建议稿全文 + 审批历史 + 上下文缺口 + bid 参数（审批门 Web 页数据源）。"""
+    from .methodology.params import get_param_group
+    from .storage import AnalysisRun, Approval, Proposal
+
+    with session_scope() as s:
+        p = s.get(Proposal, proposal_id)
+        if p is None:
+            _emit({"error": f"提案不存在：{proposal_id}"}, json_out)
+            raise typer.Exit(1)
+        approvals = [
+            {"decision": a.decision, "decided_by": a.decided_by, "decided_at": a.decided_at,
+             "comment": a.comment, "self_approval": bool(a.self_approval)}
+            for a in s.scalars(
+                select(Approval).where(Approval.proposal_id == p.id).order_by(Approval.created_at)
+            ).all()
+        ]
+        bid_params: dict = {}
+        run_flags: dict = {}
+        supplement_weeks: list[str] = []
+        run = s.get(AnalysisRun, p.analysis_run_id)
+        if run is not None:
+            bid_params = get_param_group(s, "bid_adjustment", run.methodology_version_id)
+            flags = json.loads(run.context_flags_json or "{}")
+            run_flags = {
+                k: flags.get(k)
+                for k in ("data_gaps", "immature_ratio", "needs_manual_attention")
+            }
+            try:
+                sup = (json.loads(run.context_json or "{}")
+                       .get("lingxing_mcp_supplement") or {})
+                if sup.get("status") == "ok":
+                    supplement_weeks = [
+                        f"{w['week']} {w['report_date']}" for w in sup.get("weeks", [])
+                    ]
+            except ValueError:
+                pass
+        payload = json.loads(p.payload_json) if p.payload_json else None
+
+    _emit({
+        "id": p.id, "sku": p.sku, "target": p.target, "action_type": p.action_type,
+        "status": p.status, "created_by": p.created_by, "created_at": p.created_at,
+        "analysis_run_id": p.analysis_run_id,
+        "payload": payload, "approvals": approvals, "run_flags": run_flags,
+        "bid_params": bid_params, "supplement_weeks": supplement_weeks,
+    }, json_out)
 
 
 @proposal_app.command("approve")
@@ -663,6 +716,7 @@ def proposal_approve(
     by: str = typer.Option(..., "--by"),
     file: Optional[str] = typer.Option(None, "--file", help="修改稿 JSON（modify 必填）"),
     comment: Optional[str] = typer.Option(None, "--comment"),
+    actor: str = typer.Option("cli", "--actor", help="调用面标识（cli/webgate/mcp）"),
     json_out: JSON_OPT = False,
 ) -> None:
     """人工审批（T6：审批与执行分离）。"""
@@ -679,7 +733,7 @@ def proposal_approve(
         with session_scope() as s:
             approval = approve_proposal(
                 s, proposal_id, real, decided_by=by,
-                modified_payload=modified, comment=comment,
+                modified_payload=modified, comment=comment, actor=actor,
             )
             s.commit()
         _emit({"approval_id": approval.id, "proposal_id": proposal_id, "decision": real,
@@ -696,6 +750,7 @@ def action_create(
     executor: Optional[str] = typer.Option(None, "--executor"),
     rollback_file: Optional[str] = typer.Option(None, "--rollback-file", help="回滚策略 JSON"),
     by: str = typer.Option("cli", "--by"),
+    actor: str = typer.Option("cli", "--actor", help="调用面标识（cli/webgate/mcp）"),
     json_out: JSON_OPT = False,
 ) -> None:
     """创建动作（须已审批，T6；幂等，T8）。"""
@@ -709,7 +764,7 @@ def action_create(
         with session_scope() as s:
             action, created = create_action(
                 s, proposal_id, executor=executor or by, execute_mode=mode,
-                rollback_policy=policy, actor=by,
+                rollback_policy=policy, actor=actor,
             )
             s.commit()
         _emit({"action_id": action.id, "created": created, "status": action.status,

@@ -44,7 +44,7 @@ AS_OF = TODAY.isoformat()
 MATURE_DAY = (TODAY - timedelta(days=20)).isoformat()
 DATE_FROM = (TODAY - timedelta(days=40)).isoformat()
 DATE_TO = TODAY.isoformat()
-CAMPAIGN = "GJHIUBKNGT-AZDAuto"
+CAMPAIGN = "TESTNGT-AZDAuto"
 
 
 

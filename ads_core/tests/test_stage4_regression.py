@@ -139,10 +139,10 @@ def test_reg_4_context_structure(_regression_env):
     with session_scope() as s:
         p = upsert_product(s, sku="6978", actor="regression")
         s.commit()
-        update_profile(s, p.product_id, {"A_basic": {"asin": "B0HB4XFV2F"}}, reason="reg", changed_by="reg")
+        update_profile(s, p.product_id, {"A_basic": {"asin": "B0TEST0001"}}, reason="reg", changed_by="reg")
         s.commit()
-        map_campaign(s, campaign_id="29437742665971", product_id=p.product_id,
-                     mapped_by="reg", campaign_name="GJHIUBKNGT-AZDAuto", ad_product_type="sp")
+        map_campaign(s, campaign_id="111111111111", product_id=p.product_id,
+                     mapped_by="reg", campaign_name="TESTNGT-AZDAuto", ad_product_type="sp")
         s.commit()
         run = assemble_analysis_context(
             s, sku="6978", date_from="2025-12-01", date_to="2026-01-05", actor="regression",

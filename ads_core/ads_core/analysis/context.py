@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..events import events_in_window
 from ..methodology import latest_released, require_released_version
+from .lingxing_mcp import collect_lingxing_supplement
 from ..methodology.params import get_param_group
 from ..storage.audit import write_audit
 from ..storage.models import (
@@ -202,6 +203,9 @@ def assemble_analysis_context(
         .order_by(KeywordRankSnapshot.captured_on)
     ).all()
 
+    # 领星 MCP 周检补充证据（D11 一期：周期聚合口径，仅对照用，不进事实层）
+    supplement = collect_lingxing_supplement(date_from, date_to, {product.asin} if product.asin else set())
+
     rules = session.scalars(
         select(MethodologyRule).where(MethodologyRule.methodology_version_id == methodology.id)
     ).all()
@@ -257,6 +261,7 @@ def assemble_analysis_context(
             "comparison_campaign_mature_only": _segment_compare(campaign_rows, mid),
         },
         "keyword_ranks": _rank_history(list(ranks)),
+        "lingxing_mcp_supplement": supplement,
         "business_events": flags["confounding_events"],
         "methodology": {
             "one_line_conclusion": methodology.summary,
@@ -331,7 +336,18 @@ def assemble_analysis_context(
     for r in hard:
         _add_ev("methodology_rule", r.id, {"rule_code": r.rule_code, "layer": "hard"})
     _add_ev("product_profile", profile.id, {"version_no": profile.version_no})
-    evidence_count = len(all_fact_rows) + len(events) + len(ranks) + len(hard) + 1
+    supplement_weeks = (
+        supplement.get("weeks", []) if isinstance(supplement, dict) else []
+    )
+    for w in supplement_weeks:
+        _add_ev("lingxing_mcp_supplement", f"{w['week']}:{w['report_date']}", {
+            "period": [w["period_start"], w["period_end"]],
+            "store_campaign_aggregate": w["store_campaign_aggregate"],
+            "matched_products": len(w["matched_products"]),
+        })
+    evidence_count = (
+        len(all_fact_rows) + len(events) + len(ranks) + len(hard) + 1 + len(supplement_weeks)
+    )
 
     write_audit(session, actor, "analysis.context", "analysis_run", run.id, {
         "sku": sku, "date_range": [date_from, date_to],

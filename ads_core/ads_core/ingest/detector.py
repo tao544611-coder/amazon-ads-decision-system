@@ -16,8 +16,12 @@ import yaml
 
 
 def normalize_header(h: str) -> str:
-    """归一化：去 BOM → strip → 连续空白折叠 → 小写。"""
-    return re.sub(r"\s+", " ", h.lstrip("\ufeff").strip()).lower()
+    """归一化：去 BOM → strip → 下划线视为空格 → 连续空白折叠 → 小写。
+
+    下划线归一（O-1 增补 2）：本地清洗派生 csv 列名用 snake_case（ad_group 等），
+    与指纹的空格形式（ad group）对齐，避免 negative/必要列判定失真。
+    """
+    return re.sub(r"\s+", " ", h.replace("_", " ").lstrip("\ufeff").strip()).lower()
 
 
 @dataclass
@@ -28,6 +32,7 @@ class DetectionResult:
     missing_required: list[str] = field(default_factory=list)
     ambiguities: dict[str, Any] = field(default_factory=dict)
     attribution_window_days: int | None = None
+    variant: str | None = None  # D11：命中 report_variants 变体名（None=主类型直判）
 
     @property
     def is_unknown(self) -> bool:
@@ -79,13 +84,20 @@ def detect(headers: list[str], fingerprints: dict[str, Any] | None = None) -> De
     threshold = float(fp.get("confidence_threshold", 0.85))
     margin = float(fp.get("margin", 0.1))
 
-    scores: list[tuple[str, float, list[str], list[str]]] = []
+    # D11 候选集：report_types（主类型）+ report_variants（源变体 → maps_to 映射）
+    candidates: list[tuple[str, dict[str, Any], str | None]] = [
+        (name, spec, None) for name, spec in fp["report_types"].items()
+    ]
+    for vname, vspec in (fp.get("report_variants") or {}).items():
+        candidates.append((vname, vspec, vspec.get("maps_to")))
+
+    scores: list[tuple[str, float, list[str], list[str], str | None, str | None]] = []
     ambiguous_types: dict[str, Any] = {}
 
-    for rtype, spec in fp["report_types"].items():
+    for name, spec, maps_to in candidates:
         negative_hit = [c for grp in spec.get("negative", []) for c in grp if c in norm]
         if negative_hit:
-            ambiguous_types[rtype] = {"reason": "negative_column_present", "columns": negative_hit}
+            ambiguous_types[name] = {"reason": "negative_column_present", "columns": negative_hit}
             continue
 
         matched: list[str] = []
@@ -112,7 +124,7 @@ def detect(headers: list[str], fingerprints: dict[str, Any] | None = None) -> De
         # 区分项视为满足（dist_ratio=1.0），否则其满分恒 0.8 < 阈值 0.85，永远 unknown。
         dist_ratio = (dist_hit / dist_total) if dist_total else 1.0
         confidence = required_ratio * 0.8 + dist_ratio * 0.2
-        scores.append((rtype, round(confidence, 4), matched, missing))
+        scores.append((name, round(confidence, 4), matched, missing, maps_to, name if maps_to else None))
 
     scores.sort(key=lambda s: s[1], reverse=True)
     window = infer_attribution_window(headers)
@@ -126,7 +138,7 @@ def detect(headers: list[str], fingerprints: dict[str, Any] | None = None) -> De
         )
 
     top1, runner = scores[0], scores[1] if len(scores) > 1 else None
-    top1_type, top1_conf = top1[0], top1[1]
+    top1_name, top1_conf, top1_maps_to, top1_variant = top1[0], top1[1], top1[4], top1[5]
     runner_conf = runner[1] if runner else 0.0
 
     if top1_conf < threshold or (top1_conf - runner_conf) < margin:
@@ -138,7 +150,7 @@ def detect(headers: list[str], fingerprints: dict[str, Any] | None = None) -> De
             ambiguities={
                 "reason": "low_confidence_or_margin",
                 "top_candidates": [
-                    {"type": t, "confidence": c} for t, c, _, _ in scores[:3]
+                    {"type": name, "confidence": c} for name, c, _, _, _, _ in scores[:3]
                 ],
                 "excluded_by_negative": ambiguous_types,
             },
@@ -146,10 +158,11 @@ def detect(headers: list[str], fingerprints: dict[str, Any] | None = None) -> De
         )
 
     return DetectionResult(
-        detected_type=top1_type,
+        detected_type=top1_maps_to or top1_name,
         confidence=top1_conf,
         matched=top1[2],
         missing_required=[],
         ambiguities={},
         attribution_window_days=window,
+        variant=top1_variant,
     )
