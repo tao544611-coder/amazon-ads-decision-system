@@ -607,6 +607,9 @@ class Approval(Base):
     final_payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     comment: Mapped[str | None] = mapped_column(Text)
     self_approval: Mapped[int] = mapped_column(default=0, nullable=False)  # O3-1 留痕
+    # P1-03：审批来源与身份验证状态（decided_by 为自报姓名，不视为已验证身份）
+    approval_channel: Mapped[str] = mapped_column(Text, default="cli", nullable=False)
+    identity_verified: Mapped[int] = mapped_column(default=0, nullable=False)
     created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
 
 

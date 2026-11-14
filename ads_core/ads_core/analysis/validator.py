@@ -28,6 +28,17 @@ PROPOSAL_REQUIRED_FIELDS = [
 OBSERVE_ACTIONS = {"observe", "continue_observation", "观察", "继续观察", "maintain", "维持"}
 BID_ACTIONS = {"adjust_bid", "bid", "调价", "降价", "提价", "lower_bid", "raise_bid"}
 
+# P1-01：指标引用白名单（建议须显式声明 metrics_referenced，禁止从自然语言推断）。
+# 转化侧 = 受归因回填影响的指标（HR-01：未成熟行的转化侧指标不得作为正式结论依据）；
+# 体量侧 = 花费/点击及其派生，不受归因回填影响，未成熟行可用于结构初判。
+VOLUME_METRICS = {"impressions", "clicks", "spend", "cpc", "ctr"}
+CONVERSION_METRICS = {"orders", "sales", "conversions", "units", "acos", "cvr", "roas", "cpa"}
+METRIC_ALIASES = {
+    "order": "orders", "conversion": "conversions", "conv": "conversions",
+    "sale": "sales", "impression": "impressions", "click": "clicks",
+    "unit": "units", "cost": "spend", "spends": "spend",
+}
+
 
 @dataclass
 class ProposalVerdict:
@@ -46,9 +57,20 @@ def _is_bid_action(proposal: dict) -> bool:
     return any(k in action for k in BID_ACTIONS) or action in BID_ACTIONS
 
 
+def _is_number(v: Any) -> bool:
+    """数值判定（bool 是 int 子类，须排除——True 不应被当作出价 1）。"""
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
 def _adjustment_pct(proposal: dict) -> float | None:
+    """调价幅度（百分比数值）：优先独立字段 adjustment_pct（P1-01 拆分），次选
+    数值型 adjustment；字符串仅识别百分比形式（`10%` → 10）。纯数字字符串按
+    幅度解释（与历史行为兼容），但绝不作为目标出价使用。"""
+    pct = proposal.get("adjustment_pct")
+    if _is_number(pct):
+        return float(pct)
     adj = proposal.get("adjustment")
-    if isinstance(adj, (int, float)):
+    if _is_number(adj):
         return float(adj)
     if isinstance(adj, str):
         m = re.search(r"(-?\d+(?:\.\d+)?)\s*%", adj)
@@ -62,17 +84,53 @@ def _adjustment_pct(proposal: dict) -> float | None:
 
 
 def _new_bid_value(proposal: dict) -> float | None:
-    """从建议中提取目标出价（adjustment 中的 £ 数值或 new_bid 字段）。"""
-    for key in ("new_bid", "target_bid"):
+    """目标出价：仅接受显式数值字段 target_bid（别名 new_bid 兼容历史建议）。
+
+    P1-01：禁止从 adjustment 等自然语言/字符串中提取数字来决定目标出价
+    （旧实现会把 `10%` 调价幅度误识别为目标出价 £10）。未提供时返回 None，
+    VR-03 无法核验即不判定，绝不猜数。
+    """
+    for key in ("target_bid", "new_bid"):
         v = proposal.get(key)
-        if isinstance(v, (int, float)):
+        if _is_number(v):
             return float(v)
-    adj = proposal.get("adjustment")
-    if isinstance(adj, str):
-        m = re.search(r"(?:£|gbp)?\s*(\d+(?:\.\d+)?)", adj.lower())
-        if m:
-            return float(m.group(1))
     return None
+
+
+def _referenced_metrics(proposal: dict) -> tuple[list[str] | None, str | None]:
+    """读取并归一化建议声明的指标引用（P1-01）。
+
+    返回 (指标列表, 错误说明)。指标列表为 None 表示「无法核验的引用声明」，
+    调用方须按安全原则处理（视为引用了转化侧指标，不得绕过成熟度校验）：
+    - 字段缺失 / 不是非空字符串列表 / 含未知指标名 → (None, 原因)。
+    归一化：小写去空白 + 常见单复数/别名映射；重复去重，保持首次出现顺序。
+    """
+    raw = proposal.get("metrics_referenced")
+    if raw is None:
+        return None, "建议未提供 metrics_referenced（指标引用声明）"
+    if not isinstance(raw, list) or not raw:
+        return None, "metrics_referenced 为空或不是非空数组（引用声明不可核验）"
+    out: list[str] = []
+    for item in raw:
+        if not isinstance(item, str) or not item.strip():
+            return None, "metrics_referenced 含非字符串/空元素（引用声明不可核验）"
+        token = METRIC_ALIASES.get(item.strip().lower(), item.strip().lower())
+        if token not in (VOLUME_METRICS | CONVERSION_METRICS):
+            return None, f"metrics_referenced 含未知指标名 {item.strip()!r}（引用声明不可核验）"
+        if token not in out:
+            out.append(token)
+    return out, None
+
+
+def _exception_text(proposal: dict) -> tuple[str, str]:
+    """HR-08/HR-09 例外说明字段（P1-02 对齐 YAML：护栏允许例外，须写明理由；
+    ±15% 步长例外还须写明回滚方案）。返回 (理由, 回滚方案)，均去除首尾空白。"""
+    justification = proposal.get("exception_justification")
+    rollback_plan = proposal.get("exception_rollback_plan")
+    return (
+        justification.strip() if isinstance(justification, str) else "",
+        rollback_plan.strip() if isinstance(rollback_plan, str) else "",
+    )
 
 
 def _schema_check(proposal: dict) -> list[str]:
@@ -89,40 +147,57 @@ def _hard_rules(
     violations: list[dict] = []
     bid_params = get_param_group(session, "bid_adjustment", run.methodology_version_id)
 
-    # VR-01：未成熟行的转化侧指标作为依据（HR-01/02）
+    # VR-01：未成熟行的转化侧指标作为依据（HR-01/02）——按建议显式声明的
+    # metrics_referenced 判断（P1-01），不再从自然语言字段是否为空推断。
     for fid in proposal.get("fact_evidence_ids", []):
         ev = evidence_index.get(fid)
         if ev and ev["evidence_type"] == "metric_daily" and ev["snapshot"].get("maturity") != "mature":
-            conversions_used = any(
-                str(proposal.get(k, "")).strip()
-                for k in ("current_performance", "reasoning", "expected_effect", "problem")
+            metrics, ref_error = _referenced_metrics(proposal)
+            conversion_used = (
+                bool(set(metrics or []) & CONVERSION_METRICS) if metrics is not None else True
             )
-            if conversions_used:
+            if conversion_used:
+                reason = (
+                    ref_error or
+                    f"声明引用了转化侧指标 {sorted(set(metrics) & CONVERSION_METRICS)}"
+                )
                 violations.append({
                     "code": "VR-01",
                     "detail": f"证据 {fid[:8]}… 为未成熟行（{ev['snapshot'].get('maturity')}），"
-                              "其转化侧指标不得作为正式结论依据（HR-01/02）",
+                              f"其转化侧指标不得作为正式结论依据（HR-01/02）；判定依据：{reason}。"
+                              "仅声明花费/点击等体量侧指标（metrics_referenced）可用于结构初判",
                 })
                 break
 
     if _is_bid_action(proposal):
-        # VR-02：幅度边界
+        justification, rollback_plan = _exception_text(proposal)
+        # VR-02：幅度边界（HR-08：更大步长须写明理由与回滚——P1-02 对齐 YAML，
+        # 例外 = exception_justification + exception_rollback_plan 同时非空）
         pct = _adjustment_pct(proposal)
         max_pct = float(bid_params.get("max_single_change_pct", 15))
         if pct is not None and abs(pct) > max_pct:
-            violations.append({
-                "code": "VR-02",
-                "detail": f"调整幅度 {pct}% 超出方法论上限 ±{max_pct}%（bid_adjustment）",
-            })
-        # VR-03：出价上下沿
+            if justification and rollback_plan:
+                pass  # HR-08 例外成立：理由与回滚已随提案进入待批，由人工裁决
+            else:
+                violations.append({
+                    "code": "VR-02",
+                    "detail": f"调整幅度 {pct}% 超出方法论上限 ±{max_pct}%（bid_adjustment）。"
+                              "HR-08 允许更大步长，但须在提案中写明理由与回滚方案："
+                              "exception_justification + exception_rollback_plan 均非空",
+                })
+        # VR-03：出价上下沿（HR-09：越界须写明理由——例外 = exception_justification 非空）
         bid = _new_bid_value(proposal)
         floor = float(bid_params.get("uk_floor_gbp", 0.10))
         ceiling = float(bid_params.get("uk_ceiling_gbp", 2.00))
         if bid is not None and not (floor <= bid <= ceiling):
-            violations.append({
-                "code": "VR-03",
-                "detail": f"目标出价 £{bid} 超出 UK 上下沿 [{floor}, {ceiling}]（bid_adjustment）",
-            })
+            if justification:
+                pass  # HR-09 例外成立：理由已随提案进入待批
+            else:
+                violations.append({
+                    "code": "VR-03",
+                    "detail": f"目标出价 £{bid} 超出 UK 上下沿 [{floor}, {ceiling}]（bid_adjustment）。"
+                              "HR-09 允许越界，但须在提案中写明理由：exception_justification 非空",
+                })
         # VR-04：样本量门槛（观察类建议除外）
         min_clicks = int(bid_params.get("min_clicks_for_bid_action", 20))
         action = str(proposal.get("action", "")).lower()

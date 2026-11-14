@@ -3,8 +3,17 @@
 
 权限分级（物理不注册 = 最硬边界）：
   read（默认）  只读查询
-  analysis      + 上下文组装 / 建议校验 / 经验写入
-  data          + 数据导入与决策链写操作（高危，仅受信本机）
+  analysis      + 上下文组装 / 建议校验 / 经验写入（分析 Agent 的最高权限）
+  data          + 数据导入与决策链写操作（高危，仅受信本机人工操作流程）
+
+权限与身份边界（P1-03）：
+- analysis 级 Agent 物理拿不到审批/动作创建/回执/回滚/观察/验收等写工具。
+- data 级是本地受限操作面：本系统当前 **没有可信身份认证能力**，任何工具参数
+  中的姓名（如 proposal_approve.decided_by）都是调用者自报，不视为已验证身份；
+  审批行以 approval_channel + identity_verified 如实记录来源与验证状态
+  （仅 webgate 本机审批门=已验证人工通道）。
+- action_rollback 为 **记录层回滚**：仅改本地动作状态与留痕，不向亚马逊后台
+  发送任何反向操作，不代表广告原始状态已恢复。
 
 每次调用统一写 audit_log（actor=mcp:<tool>:<perms>；密钥/二进制内容不入日志）。
 """
@@ -327,7 +336,12 @@ def build_server(permissions: list[str] | None = None) -> FastMCP:
             proposal_id: str, decision: str, decided_by: str,
             modified_payload: Optional[dict] = None, comment: Optional[str] = None,
         ) -> str:
-            """人工审批（approve|modify_approve|reject|defer；写操作）。"""
+            """人工审批（approve|modify_approve|reject|defer；本机受限写操作）。
+
+            注意：decided_by 是调用者自报姓名，本系统无身份认证能力，
+            经 MCP 提交的审批一律标记 identity_verified=false（未验证），
+            不作为已验证人工审批凭证；已验证人工审批仅来自 webgate 本机审批门。
+            """
             from .decision import approve_proposal
 
             _audit("proposal_approve", {"proposal_id": proposal_id, "decision": decision})
@@ -335,9 +349,16 @@ def build_server(permissions: list[str] | None = None) -> FastMCP:
                 approval = approve_proposal(
                     s, proposal_id, decision, decided_by=decided_by,
                     modified_payload=modified_payload, comment=comment,
+                    actor="mcp:proposal_approve:data",
                 )
                 s.commit()
-            return json.dumps({"approval_id": approval.id}, ensure_ascii=False)
+            return json.dumps({
+                "approval_id": approval.id,
+                "channel": approval.approval_channel,
+                "identity_verified": bool(approval.identity_verified),
+                "note": "MCP 审批未经身份验证（decided_by 为自报姓名）；"
+                        "已验证人工审批仅来自本机审批门 webgate",
+            }, ensure_ascii=False)
 
         @mcp.tool
         def action_create(
@@ -375,14 +396,25 @@ def build_server(permissions: list[str] | None = None) -> FastMCP:
 
         @mcp.tool
         def action_rollback(action_id: str, reason: str, by: str) -> str:
-            """回滚动作（留痕不删；写操作）。"""
-            from .decision import rollback_action
+            """标记动作回滚（记录层回滚；留痕不删；本机受限写操作）。
+
+            语义边界：仅推进本地动作状态为 rolled_back 并留痕，**不向亚马逊后台
+            发送任何反向操作**，不代表广告原始状态已恢复；如需恢复出价/状态，
+            须另行人工在后台操作并经 action_receipt 核验。
+            """
+            from .decision import mark_action_rolled_back
 
             _audit("action_rollback", {"action_id": action_id})
             with session_scope() as s:
-                rollback_action(s, action_id, reason=reason, by=by)
+                mark_action_rolled_back(s, action_id, reason=reason, by=by)
                 s.commit()
-            return json.dumps({"action_id": action_id, "status": "rolled_back"}, ensure_ascii=False)
+            return json.dumps({
+                "action_id": action_id,
+                "status": "rolled_back",
+                "rollback_scope": "record_layer_only",
+                "external_platform_restored": False,
+                "note": "记录层回滚：本地状态标记与留痕，广告后台未做任何恢复操作",
+            }, ensure_ascii=False)
 
         @mcp.tool
         def observation_create(action_id: str) -> str:

@@ -829,13 +829,16 @@ def action_rollback(
     by: str = typer.Option(..., "--by"),
     json_out: JSON_OPT = False,
 ) -> None:
-    from .decision import DecisionError, rollback_action
+    """记录层回滚：仅标记本地动作状态并留痕（T8），不向广告后台发送反向操作。"""
+    from .decision import DecisionError, mark_action_rolled_back
 
     try:
         with session_scope() as s:
-            rollback_action(s, action_id, reason=reason, by=by)
+            mark_action_rolled_back(s, action_id, reason=reason, by=by)
             s.commit()
-        _emit({"action_id": action_id, "status": "rolled_back"}, json_out)
+        _emit({"action_id": action_id, "status": "rolled_back",
+               "rollback_scope": "record_layer_only",
+               "external_platform_restored": False}, json_out)
     except DecisionError as exc:
         _emit({"error": str(exc)}, json_out)
         raise typer.Exit(1)

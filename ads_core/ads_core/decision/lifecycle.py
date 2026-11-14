@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..events import events_in_window
@@ -24,6 +24,7 @@ from ..storage.models import (
     ExecutionReceipt,
     MetricDaily,
     Observation,
+    Product,
     Proposal,
     now_iso,
 )
@@ -31,6 +32,12 @@ from ..storage.models import (
 
 class DecisionError(Exception):
     pass
+
+
+# P0-02：真实执行过、对平台产生过影响的动作状态（rolled_back 曾执行后记录层回滚，
+# 观察期内其执行效果仍然存在过，故计入同期干扰；pending/executing/execution_failed/
+# cancelled 未对平台生效，不计入）。
+EXECUTED_ACTION_STATUSES = ("executed", "rolled_back")
 
 
 # ---------------------------------------------------------------- 提案
@@ -114,7 +121,17 @@ def approve_proposal(
     modified_payload: dict | None = None,
     comment: str | None = None,
     actor: str = "cli",
+    identity_verified: bool | None = None,
+    channel: str | None = None,
 ) -> Approval:
+    """人工审批（T6）。
+
+    身份语义（P1-03）：`decided_by` 是调用者自报姓名，系统无身份认证能力，
+    不将其视为已验证身份；审批行通过 `approval_channel` + `identity_verified`
+    如实记录审批来源与验证状态——
+    - channel="webgate"：本机审批门（仅监听 127.0.0.1 的人工操作页），视为已验证人工审批；
+    - channel="mcp"/"cli"：未验证（decided_by 仅为自报留痕，不作为人工审批凭证）。
+    """
     if decision not in APPROVAL_TRANSITIONS:
         raise DecisionError(f"decision 须为 {'|'.join(APPROVAL_TRANSITIONS)}")
     proposal = session.get(Proposal, proposal_id)
@@ -122,6 +139,11 @@ def approve_proposal(
         raise DecisionError(f"提案不存在：{proposal_id}")
     if proposal.status != "pending_approval":
         raise DecisionError(f"提案状态 {proposal.status} 非 pending_approval（deferred 可重新提请）")
+
+    if channel is None:
+        channel = "mcp" if actor.startswith("mcp") else actor
+    if identity_verified is None:
+        identity_verified = channel == "webgate"  # 仅本机审批门=已验证人工通道
 
     final = (
         json.dumps(modified_payload, ensure_ascii=False)
@@ -140,6 +162,8 @@ def approve_proposal(
         final_payload_json=final,
         comment=comment,
         self_approval=self_approval,
+        approval_channel=channel,
+        identity_verified=1 if identity_verified else 0,
         created_at=now_iso(),
     )
     session.add(approval)
@@ -148,7 +172,8 @@ def approve_proposal(
 
     write_audit(session, actor, "proposal.approve", "proposal", proposal_id,
                 {"decision": decision, "decided_by": decided_by,
-                 "self_approval": bool(self_approval)})
+                 "self_approval": bool(self_approval),
+                 "channel": channel, "identity_verified": bool(identity_verified)})
     return approval
 
 
@@ -276,10 +301,16 @@ def record_receipt(
     return action
 
 
-def rollback_action(
+def mark_action_rolled_back(
     session: Session, action_id: str, reason: str, by: str, actor: str = "cli"
 ) -> Action:
-    """回滚（T8）：状态推进 + 历史完整保留（不删不覆盖）。"""
+    """记录层回滚（T8 · P1-03 语义澄清）：仅推进本地动作状态并留痕。
+
+    本函数只做三件事：状态改为 rolled_back、写入回滚原因/操作人/时间、审计留痕
+    （历史不删不覆盖）。它 **不向亚马逊后台发送任何反向操作**，不等于广告原始
+    状态已恢复——外部平台的实际恢复须另行人工操作并经回执核验（未来如需真正的
+    外部回滚，作为独立需求开发）。历史命名 rollback_action 保留为兼容别名。
+    """
     action = session.get(Action, action_id)
     if action is None:
         raise DecisionError(f"动作不存在：{action_id}")
@@ -287,18 +318,115 @@ def rollback_action(
         raise DecisionError(f"仅 executed 动作可回滚（当前 {action.status}）")
     action.status = "rolled_back"
     action.result_json = json.dumps(
-        {"rollback_reason": reason, "rolled_back_by": by, "rolled_back_at": now_iso()},
+        {
+            "rollback_reason": reason,
+            "rolled_back_by": by,
+            "rolled_back_at": now_iso(),
+            "rollback_scope": "record_layer_only",
+            "external_platform_restored": False,
+        },
         ensure_ascii=False,
     )
-    write_audit(session, actor, "action.rollback", "action", action_id, {"reason": reason})
+    write_audit(session, actor, "action.rollback", "action", action_id,
+                {"reason": reason, "scope": "record_layer_only"})
     return action
+
+
+# 兼容别名：旧调用面（CLI/tests/外部脚本）无需改动；语义见 mark_action_rolled_back
+rollback_action = mark_action_rolled_back
 
 
 # ---------------------------------------------------------------- 观察（F5/T7）
 
 
+def _action_sku_product(session: Session, action: Action) -> tuple[Proposal, Product]:
+    """P0-01：动作 → 提案 → SKU → 产品（观察数据 SKU 归属锚点）。
+
+    提案 SKU 缺产品档案或无关联提案时直接报错——归属不明不允许建观察
+    （数据无法确认归属不得静默纳入计算，PRD 5.1）。
+    多 SKU 变更须拆成多个提案/动作（每动作唯一 SKU），观察窗不做跨 SKU 混合汇总。
+    """
+    proposal = session.get(Proposal, action.proposal_id)
+    if proposal is None:
+        raise DecisionError(f"动作 {action.id} 无关联提案，无法确定 SKU 归属")
+    product = session.scalars(
+        select(Product).where(Product.sku == proposal.sku)
+    ).first()
+    if product is None:
+        raise DecisionError(
+            f"提案 SKU {proposal.sku!r} 无产品档案，无法确定观察数据归属（先 ads product add）"
+        )
+    return proposal, product
+
+
+def _sku_campaign_rows(
+    session: Session, product_id: str, date_from: str, date_to: str,
+    end_inclusive: bool,
+) -> tuple[list[MetricDaily], int]:
+    """P0-01：窗口内该 SKU 的成熟 campaign 事实行（按 product_id 归属过滤）。
+
+    同窗口内 product_id 为 NULL 的 campaign 行无法确认 SKU 归属（活动未映射或
+    事实行先于映射建立）——一律不纳入计算，仅计数返回供标注「数据不足」；
+    绝不静默混入。基线与观察期必须使用同一过滤口径。
+    """
+    base = [
+        MetricDaily.grain == "campaign",
+        MetricDaily.date >= date_from,
+        MetricDaily.maturity == "mature",
+    ]
+    end_cond = MetricDaily.date <= date_to if end_inclusive else MetricDaily.date < date_to
+    rows = session.scalars(
+        select(MetricDaily).where(*base, end_cond, MetricDaily.product_id == product_id)
+    ).all()
+    unattributed = session.scalar(
+        select(func.count()).select_from(MetricDaily).where(
+            *base, end_cond, MetricDaily.product_id.is_(None),
+        )
+    )
+    return list(rows), int(unattributed or 0)
+
+
+def _sku_attribution_note(unattributed_rows: int) -> dict:
+    return {
+        "filter": "metric_daily.product_id == 动作提案 SKU 的产品（campaign 粒度）",
+        "unattributed_campaign_rows": unattributed_rows,
+        "attribution_complete": unattributed_rows == 0,
+    }
+
+
+def _concurrent_action_ids(
+    session: Session, exclude_action_id: str, start: date, end: date,
+) -> list[str]:
+    """P0-02：观察窗 [start, end]（含首尾日）内真实执行过的其他动作。
+
+    仅计入 status ∈ EXECUTED_ACTION_STATUSES 且 executed_at 日期落在窗口内的动作；
+    executed_at 日期无法解析的动作不计入（宁缺勿误报）。窗口边界与
+    complete_observation 的日期口径一致（start/end 均包含）。
+    """
+    actions = session.scalars(
+        select(Action).where(
+            Action.id != exclude_action_id,
+            Action.status.in_(EXECUTED_ACTION_STATUSES),
+            Action.executed_at.is_not(None),
+        )
+    ).all()
+    ids: list[str] = []
+    for a in actions:
+        try:
+            exec_day = date.fromisoformat(str(a.executed_at)[:10])
+        except (TypeError, ValueError):
+            continue
+        if start <= exec_day <= end:
+            ids.append(a.id)
+    return sorted(ids)
+
+
 def create_observation(session: Session, action_id: str, actor: str = "cli") -> Observation:
-    """G5：观察窗 = max(验证窗, 归因满窗)（F5）；基准快照 + 同期事件/动作自动拉取（T7）。"""
+    """G5：观察窗 = max(验证窗, 归因满窗)（F5）；基准快照 + 同期事件/动作自动拉取（T7）。
+
+    P0-01：基准行按动作提案 SKU 的 product_id 过滤；无法确认归属的行计数标注，
+    不纳入计算。P0-02：同期动作仅识别窗口内真实执行过的动作。
+    """
     action = session.get(Action, action_id)
     if action is None:
         raise DecisionError(f"动作不存在：{action_id}")
@@ -310,7 +438,7 @@ def create_observation(session: Session, action_id: str, actor: str = "cli") -> 
     if existing is not None:
         return existing
 
-    proposal = session.get(Proposal, action.proposal_id)
+    proposal, product = _action_sku_product(session, action)
     mv = proposal.methodology_version_id if proposal else None
     acceptance = get_param_group(session, "acceptance", mv)
     sp_days = maturity_days(session, "sp", mv)
@@ -324,17 +452,16 @@ def create_observation(session: Session, action_id: str, actor: str = "cli") -> 
     start = date.fromisoformat((action.executed_at or now_iso())[:10])
     end = start + timedelta(days=window_days)
 
-    # 基准：动作前该 SKU 窗口事实快照（执行日前 7 天成熟行聚合）
-    baseline_rows = session.scalars(
-        select(MetricDaily).where(
-            MetricDaily.grain == "campaign",
-            MetricDaily.date >= (start - timedelta(days=7)).isoformat(),
-            MetricDaily.date < start.isoformat(),
-            MetricDaily.maturity == "mature",
-        )
-    ).all()
+    # 基准：动作前该 SKU 窗口事实快照（执行日前 7 天成熟行聚合；SKU 归属过滤 P0-01）
+    baseline_rows, baseline_unattributed = _sku_campaign_rows(
+        session, product.id, (start - timedelta(days=7)).isoformat(), start.isoformat(),
+        end_inclusive=False,
+    )
     baseline = {
         "period": "exec-7d~exec",
+        "sku": proposal.sku,
+        "product_id": product.id,
+        "sku_attribution": _sku_attribution_note(baseline_unattributed),
         "rows": [
             {"fact_id": m.id, "date": m.date, "spend": m.spend, "clicks": m.clicks,
              "orders": m.orders, "sales": m.sales, "acos": m.acos}
@@ -342,12 +469,9 @@ def create_observation(session: Session, action_id: str, actor: str = "cli") -> 
         ],
     }
 
-    # 同期干扰（T7）：观察窗内业务事件 + 其他动作
+    # 同期干扰（T7）：观察窗内业务事件 + 窗口内真实执行的其他动作（P0-02）
     events = events_in_window(session, start.isoformat(), end.isoformat())
-    others = [
-        a.id for a in session.scalars(select(Action).where(Action.id != action_id)).all()
-        if (a.executed_at or "")[:10] <= end.isoformat()
-    ]
+    others = _concurrent_action_ids(session, action_id, start, end)
 
     observation = Observation(
         action_id=action_id,
@@ -368,29 +492,31 @@ def create_observation(session: Session, action_id: str, actor: str = "cli") -> 
     session.flush()
     write_audit(session, actor, "observation.create", "observation", observation.id,
                 {"window": [observation.window_start, observation.window_end],
-                 "concurrent_events": len(events)})
+                 "concurrent_events": len(events), "concurrent_actions": len(others),
+                 "sku": proposal.sku,
+                 "baseline_unattributed_rows": baseline_unattributed})
     return observation
 
 
 def complete_observation(session: Session, observation_id: str, actor: str = "cli") -> Observation:
+    """观察窗完结：窗口内事实快照（与基线同一 SKU 归属过滤口径，P0-01）。"""
     obs = session.get(Observation, observation_id)
     if obs is None:
         raise DecisionError(f"观察不存在：{observation_id}")
     if obs.status != "open":
         raise DecisionError(f"观察状态 {obs.status} 非 open")
     action = session.get(Action, obs.action_id)
+    proposal, product = _action_sku_product(session, action)
 
-    # 动作后数据：窗口内事实快照
-    post_rows = session.scalars(
-        select(MetricDaily).where(
-            MetricDaily.grain == "campaign",
-            MetricDaily.date >= obs.window_start,
-            MetricDaily.date <= obs.window_end,
-            MetricDaily.maturity == "mature",
-        )
-    ).all()
+    # 动作后数据：窗口内该 SKU 事实快照（P0-01：与基线同一过滤口径）
+    post_rows, post_unattributed = _sku_campaign_rows(
+        session, product.id, obs.window_start, obs.window_end, end_inclusive=True,
+    )
     obs.post_data_json = json.dumps(
         {"period": [obs.window_start, obs.window_end],
+         "sku": proposal.sku,
+         "product_id": product.id,
+         "sku_attribution": _sku_attribution_note(post_unattributed),
          "rows": [
              {"fact_id": m.id, "date": m.date, "spend": m.spend, "clicks": m.clicks,
               "orders": m.orders, "sales": m.sales, "acos": m.acos}
@@ -401,7 +527,8 @@ def complete_observation(session: Session, observation_id: str, actor: str = "cl
     obs.status = "window_complete"
     obs.updated_at = now_iso()
     write_audit(session, actor, "observation.complete", "observation", observation_id,
-                {"post_rows": len(post_rows)})
+                {"post_rows": len(post_rows), "sku": proposal.sku,
+                 "post_unattributed_rows": post_unattributed})
     return obs
 
 

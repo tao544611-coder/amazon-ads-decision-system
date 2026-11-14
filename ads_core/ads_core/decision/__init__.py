@@ -8,10 +8,11 @@ from .lifecycle import (
     complete_observation,
     create_action,
     create_observation,
+    mark_action_rolled_back,
     record_evaluation,
     record_receipt,
     resubmit_proposal,
-    rollback_action,
+    rollback_action,  # 兼容别名（= mark_action_rolled_back）
     submit_proposals,
 )
 
@@ -22,6 +23,7 @@ __all__ = [
     "complete_observation",
     "create_action",
     "create_observation",
+    "mark_action_rolled_back",
     "record_evaluation",
     "record_receipt",
     "resubmit_proposal",

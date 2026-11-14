@@ -289,7 +289,26 @@ def assemble_analysis_context(
                 "event_evidence_ids", "reasoning", "action", "adjustment", "expected_effect",
                 "risks", "observation_window", "acceptance_criteria", "needs_approval",
             ],
-            "note": "14 必填字段；evidence_ids 引用本包 fact_id/event_id；needs_approval 恒 true",
+            "optional_fields": {
+                "metrics_referenced": (
+                    "引用指标列表（引用事实证据时必填）：impressions/clicks/spend/orders/"
+                    "sales/conversions/units/acos/cpc/cvr/roas/cpa。校验器只认此声明判断"
+                    "是否引用了转化侧指标；缺失/格式错误/含未知指标名按安全原则视为引用了"
+                    "转化侧（未成熟证据将被 VR-01 拒绝，HR-01/02）"
+                ),
+                "current_bid": "当前出价数值（£）",
+                "target_bid": "目标出价数值（£）；调价幅度写在 adjustment_pct，勿混入出价字段",
+                "adjustment_pct": "调价幅度百分比数值（如 -10 表示下调 10%）",
+                "exception_justification": (
+                    "超出护栏时的理由说明：VR-02（步长 >±15%，HR-08）与 VR-03（出价越界，HR-09）"
+                    "的例外条件"
+                ),
+                "exception_rollback_plan": (
+                    "回滚方案（仅 VR-02 步长例外需要，HR-08 要求理由+回滚）"
+                ),
+            },
+            "note": "14 必填字段；evidence_ids 引用本包 fact_id/event_id；needs_approval 恒 true；"
+                    "出价三值（current_bid/target_bid/adjustment_pct）分开填写，校验器不从自然语言提取数字",
         },
     }
 
