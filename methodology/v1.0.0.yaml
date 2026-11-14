@@ -1,0 +1,430 @@
+# ============================================================================
+# 广告投放分析方法论 · 机器可执行结构化版本 v1.0.0
+# ============================================================================
+# 状态：released（2026-11-14 Gordon 经 F1–F5 审核决议发布；决议记录见
+#       docs/methodology-extraction-diff.md §五）
+# 来源：由 ZCode 于 2026-11-14 自 Notion 同步页逐块提取，未增删业务语义，
+#       仅做三层归类与结构化；所有条目保留 Notion block-id 以便回溯原文。
+# 权威链（F1 决议）：系统方法论以 Notion 同步页为准；后续改动走
+#       PRD 4.6 版本流程（建议→人工审核→回归→发布新版本）。
+#
+# 三层结构（对应 PRD 4.6 规则分层）：
+#   hard_rules  第一层·程序硬规则 —— 由程序执行，不依赖大模型自由解释
+#   parameters  第二层·业务参数   —— 经审核可配置的阈值/权重/上下沿
+#   knowledge   第三层·运营知识   —— 供 AI 分析判断时参考的方法论知识
+# ============================================================================
+
+meta:
+  version: "1.0.0"
+  status: released
+  methodology_title: "规则 · 广告投放分析方法论 · 2026-10-26"
+  one_line_conclusion: "店级定真值，白名单做雷达，词级做手术，口径不混加，验收挂下周；活动优化先判结构再拧旋钮。"
+  extracted_from:
+    notion_page_id: "405daa16-ae4f-815c-8cda-e10649a878bc"
+    notion_url: "https://app.notion.com/p/2026-10-26-405daa16ae4f815c8cdae10649a878bc"
+    notion_location: "AmazonWorkSpace / 00 规则与配置"
+    notion_last_edited: "2026-10-30"
+    authoritative_source: "Gordon 2026-11-14 拍板（F1）：系统方法论权威链以 Notion 同步页为准；box 文件（/workspace/rubick-ai-org/reviews/广告投放分析方法论_规则_2026-10-26.md）为业务侧维护源头，仅作追溯参考，系统不直接依赖"
+  extracted_at: "2026-11-14"
+  extracted_by: "ZCode (GLM-5.3)"
+  reviewed_by: "Gordon（2026-11-14，F1–F5 审核决议）"
+  approved_by: "Gordon（2026-11-14）"
+  scope:
+    store: "昕信主店（profile 1531098959787693 / sid 17570）"
+    marketplace: "UK（Gordon 2026-11-14 确认 F2：全文金额均为 GBP £，首期 SKU 6978/6979 为 UK 站）"
+    applies_to_skus: "Gordon 四位 SKU（白名单分组 6384 / 6978_6979 等）；首期验证范围 6978 / 6979"
+    h1_boundary: "写广告/卖家后台的执行人永远是 Gordon；建议 ≠ 已批 ≠ 已执行"
+  patch_history:
+    - date: "2026-10-26"
+      approved_by: "Gordon"
+      summary: "批并入 §3.3 补丁（恒等式解释+默认护栏+结构优先）；同日批四参数：UK 上下沿 min≈£0.10/max≈£2.00；先验=白名单组；取数=领星 MCP（运营数据分析）+历史累积；授权投手补试验 apollo scripts/（仍 H1）"
+    - date: "2026-10-29"
+      approved_by: "执笔运营、投手同审 PASS"
+      summary: "§1 新增第 7 条归因拆解铁律；§3.2 第 2 条抬高否词进清单门槛；§3.3 零转化并列句改指 §3.2.2"
+    - date: "2026-10-30"
+      approved_by: "Gordon 定；执笔运营、投手同审 PASS"
+      summary: "新增 §2.4 数据成熟度（结论层满窗 SP7/SB·SD14；未满标「未成熟观察」）；§2.3 环比成熟度对称；§3.2 第2条追加归因窗未满；§3.3 调 bid 样本门槛 30→20；估 CVR 未成熟日不进转化侧加权。周检取数窗仍 T-2"
+  related_authoritative_decisions:   # §4 与近期定案的对齐（勿回退）
+    - {id: A3, gist: "白名单≠店级；未布局；关键词 Top+零转化；店级锚附录"}
+    - {id: A4, gist: "昕信毛利 finance_page_list_msku + sid=17570，按 ASIN 聚合；与广告 spends 分列"}
+    - {id: L19, gist: "白名单组花费并入归属 SB；禁把清单外 SB（GGBDWKAOP-BRJZ*）并入"}
+    - {id: "L04/U01", gist: "6978 绿白移出；7 天/下期验组合 ACOS"}
+    - {id: "2026-10-26 词级", gist: "保量控费：降价/词暂停/精否；不是 L16 整活动再停 Phrase，也不是 U03 原 A/B 否词包全做 → 挂 W44 验收"}
+
+# ============================================================================
+# 第一层 · 程序硬规则（hard_rules）
+# 由程序执行（导入门禁 / 指标计算 / 建议校验器 / 观察验收），不依赖大模型解释。
+# enforcement 取值：
+#   ingest_gate    —— 数据导入/事实计算阶段强制
+#   validator      —— AI 建议校验器强制（不通过则建议不得进待批）
+#   acceptance     —— 效果验收阶段强制
+# ============================================================================
+hard_rules:
+  - id: HR-01
+    name: 转化侧数据成熟度门禁
+    statement: >-
+      相对取数日按点击日回推：SP 点击日距今 < 7 天、SB/SD < 14 天的日子，其
+      orders / sales / ACOS / CVR 视为未成熟，不得进入正式经营结论、环比定论、
+      疗效判定、否词/暂停待批或遗漏风险清单，须标记「未成熟观察」。
+      花费与点击不受归因回填影响，可用于结构/断崖初判，但须脚注「转化侧未成熟」。
+    source: {section: "§2.4", block: "30310a32-f0a1-4879-9aca-1b55e8d1ba31"}
+    enforcement: ingest_gate
+
+  - id: HR-02
+    name: SP+SB 混算从严
+    statement: >-
+      组内 SP+SB 混算时以更严一侧为准（含 SB 则按 14 天），或 SP/SB 分列后再下结论；
+      禁止用未成熟混算 ACOS 做疗效或环比定论。
+    source: {section: "§2.4", block: "ff655c4f-42d0-4ff1-8d18-040758acfa47"}
+    enforcement: ingest_gate
+
+  - id: HR-03
+    name: 环比成熟度对称
+    statement: >-
+      环比/跨窗对比两侧须同成熟度（都成熟，或都标明未成熟且不作定论）；
+      禁止「上期已满窗、本期未满窗」的裸 ACOS 环比下红灯；不对称时只标观察。
+    source: {section: "§2.3 / §2.4", blocks: ["3f5c1b22-ae72-4c97-a06d-779124b90911", "8aa84389-1e14-49a9-81ee-7bb68e61f06c"]}
+    enforcement: ingest_gate
+
+  - id: HR-04
+    name: T-2 取数窗（且不等于成熟度）
+    statement: >-
+      周检取数窗 T-2（end_offset_days=2）只挡「进报表最多约 12 小时」的延迟；
+      不把最近 7/14 天当成已成熟转化数据。
+    source: {section: "§2.4", block: "bc3704d0-fcb0-4496-a612-1fe6050ff518"}
+    enforcement: ingest_gate
+
+  - id: HR-05
+    name: 零转化否词/暂停进单门槛
+    statement: >-
+      样本跑满且订单=0：底表可用 spend ≥ £2 做零转化雷达初筛；但进入上层待批或
+      遗漏风险清单的否词/暂停候选，必须同时满足（订单仍为 0）之一：
+      ① Clicks ≥ 组平均出单点击数（= 1/组 CVR；缺组 CVR 时默认约 10～12 次点击）；
+      ② 单项花费 ≥ £5.00。
+      点击 < 8 次、且仅因 spend ≥ £2 入雷达的零转化词，必须标「样本不足观察」，
+      严禁列入遗漏风险清单，也不得单独进否词/暂停待批。
+    source: {section: "§3.2 第2条", block: "dd0e542b-d885-4269-980c-61ee2e6076d1"}
+    enforcement: validator
+
+  - id: HR-06
+    name: 零转化候选的归因成熟度附加门禁
+    statement: >-
+      与 HR-05 并列：该词观察窗内点击日距取数日未满 §2.4（SP 7 天 / SB·SD 14 天；
+      组含 SB 从严）时，即使点击/花费已过门槛，仍须标「未成熟观察」，严禁进
+      遗漏风险清单与否词/暂停待批——订单可能仍在回填。
+    source: {section: "§3.2 第2条（并列）", block: "dd0e542b-d885-4269-980c-61ee2e6076d1"}
+    enforcement: validator
+
+  - id: HR-07
+    name: 执行级 bid 样本门槛
+    statement: >-
+      观察窗（建议 30 天）点击 < 20 → 标「继续观察」，不出执行级调价建议。
+      （Gordon 2026-10-30：由 30 改为 20。）该门槛只管「是否调 bid」，
+      与零转化门槛（HR-05）用途不同、勿混；两者可同时成立。
+    source: {section: "§3.3 默认护栏", block: "34ca1193-e7ee-4e1b-94cc-3c701881a728"}
+    enforcement: validator
+
+  - id: HR-08
+    name: 单次 bid 变动护栏
+    statement: 单次建议变动相对当前 bid 约 ≤ ±15%；更大步长须在待批里写明理由与回滚。
+    source: {section: "§3.3 默认护栏", block: "c54ab134-247a-498d-af06-b2d76869baad"}
+    enforcement: validator
+
+  - id: HR-09
+    name: UK 出价上下沿
+    statement: >-
+      单次建议出价夹在 min≈£0.10 / max≈£2.00（GBP；不适用 USD 文档默认 max≈5）。
+      越界须在待批写明理由。
+    source: {section: "§3.3 默认护栏", block: "2e1e6de3-5678-4e2b-bb33-a9788f6b2060"}
+    enforcement: validator
+
+  - id: HR-10
+    name: 未成熟日不进 CVR 加权
+    statement: >-
+      未满 §2.4 成熟度的日子不进转化侧加权（该窗权重归零后重归一化）；
+      未成熟 CVR 不得进执行级 bid 口径块。
+    source: {section: "§3.3 估 CVR", block: "f4c65447-9c02-4d80-a807-b3be33ccbe50"}
+    enforcement: ingest_gate
+
+  - id: HR-11
+    name: 结构问题优先（冲突消解先于公式）
+    statement: >-
+      §3.0 结构问题未解（好线 ACOS 低但 OUT_OF_BUDGET + 差线仍烧）→
+      不采纳 / 不出执行级 bid 建议；先挪预算或停差线。
+    source: {section: "§3.3 冲突消解", block: "7d867a28-5338-479b-a1cd-4378874e52b2"}
+    enforcement: validator
+
+  - id: HR-12
+    name: 零转化优先于微调 bid
+    statement: >-
+      零转化且满足 §3.2 第 2 条（HR-05）→ 仍优先否/停，不优先微调 bid；
+      公式与护栏不得覆盖本条与 HR-11。
+    source: {section: "§3.3 冲突消解", blocks: ["a5f06e6a-805b-4b62-82e9-ee48bae4cd86", "9e205dd5-6cc3-46a7-a6f0-47962efca42a"]}
+    enforcement: validator
+
+  - id: HR-13
+    name: 花费与 ACOS 口径不混加
+    statement: >-
+      白名单组花费（L19 后）= 原 SP/SD（product 层）+ 归属该组的 SB；
+      禁把清单外 SB（如 GGBDWKAOP-BRJZ*）并入。SP/SD-only 口径（如 W43 33.90%）
+      与 L19 后含 SB 的 ACOS 禁止裸比，须分列或脚注。
+      利润侧 spend 用 A4：finance_page_list_msku · sids=[17570] 按 ASIN 进组，
+      与广告 spends 分列；禁无 sid / 旧 6 位 MSKU 主路径。
+      「广告花费 vs 毛利/销售额」仅限同店（昕信 profile）同窗展示。
+    source: {section: "§2.2", block: "d1e879ad-85a4-4563-b1c0-9bee8b47db82"}
+    enforcement: ingest_gate
+
+  - id: HR-14
+    name: 事实/推断/待验证三分；缺数不编造
+    statement: >-
+      事实 / 推断 / 待验证分开写；缺数写「今天拿不到」，不编造。
+      出处与口径（后台/领星/ERP/外盘工具）对不齐就不硬拼、不混加。
+    source: {section: "§1 第2、3条", blocks: ["d61590d1-1158-4c5a-aa6e-248d4a455e68", "547c9944-7a22-429e-8a2b-269fe9a2e8cb"]}
+    enforcement: validator   # 校验器强制建议的证据字段分层与缺数标注
+
+  - id: HR-15
+    name: 待批四件套完整性
+    statement: >-
+      每条动作必带：证据 → 预期影响 → 风险与回滚 → 验证窗（多为 7 天或下期周检）。
+      缺任一件不得进入待批。
+    source: {section: "§1 第5条", block: "73147d60-6b69-42ea-bd67-b2c526a74927"}
+    enforcement: validator
+
+  - id: HR-16
+    name: 词级 bid 建议口径块完整性
+    statement: >-
+      若本条动作含调 bid：附件或待批正文须显式写出 目标 ACOS、CVR 观察窗与权重、
+      先验/大盘 CVR（若用了收缩）、护栏参数（如 ±15%、点击门槛）——等同可复核的
+      summary 口径块；缺一块则该建议不得标「可执行」。
+    source: {section: "§1 第6条", block: "5b45411d-9af4-4a8b-8e17-a60d636c6070"}
+    enforcement: validator
+
+  - id: HR-17
+    name: H1 执行边界
+    statement: >-
+      建议 ≠ 已批 ≠ 已执行；默认只读 MCP；不花钱取数先问。
+      禁止自动写广告/卖家后台（H1：仅 Gordon）。批量算价脚本算出价只进待批。
+    source: {section: "§0 / §3.3 边界", blocks: ["7065d91d-52d9-4827-9351-0ff8f56db6ea", "919661e4-d9b1-4fe3-a9d0-8ca066fde491"]}
+    enforcement: validator   # 对应系统权限模型：AI 写入口仅建议/观察/经验
+
+  - id: HR-18
+    name: 验收窗成熟度
+    statement: >-
+      处置后「挂下周周检」时，单量/ACOS 正式结论须等对应点击日满归因窗后再给；
+      未满前只报花费/点击与「未成熟观察」。
+    source: {section: "§2.4 验收窗", block: "3954e1e7-edf5-452d-8dc8-6e07d678e5ba"}
+    enforcement: acceptance
+
+  - id: HR-19
+    name: 周检事实层前置
+    statement: >-
+      上层分析前须有事实层（box 事实表 reviews/ads-weekly-audit/facts/YYYY-Www_facts.md；
+      规程 chains/fact-then-judge.md §1）——「事实层→判断层」同批落地；
+      禁止判断层另起一套 KPI。
+    source: {section: "页首周检事实层（2026-10-28 Gordon 批）", block: "05ccefe6-a2bc-4753-838d-98275a48cab4"}
+    enforcement: ingest_gate   # 系统落地=分析上下文包必须引用已生成的事实批次
+
+# ============================================================================
+# 第二层 · 业务参数（parameters）
+# 经审核可配置；例外须写理由（非死公式）。
+# ============================================================================
+parameters:
+  target_acos:
+    default: 0.25                     # 目标 ACOS 默认 25%
+    exceptions_note: "SKU/活动级例外（如 6979 深灰「暂不停」）正式归属产品档案（F3 决议：PRD 4.2 B 经营目标 / F 特殊规则），此处仅索引方法论原文提及的例外"
+    exceptions_index:                  # 原文索引（正式配置在产品档案维护）
+      - {scope: "SKU 6979 深灰（新品/观察款）", rule: "暂不停", source: "§3 页首"}
+    source: {section: "§3 页首", block: "7e2908d1-73de-48f3-be07-4ae1e1e52556"}
+
+  attribution_maturity:
+    sp_min_days: 7                     # SP（卖家）：点击日距取数日 ≥7 天 → 成熟
+    sb_sd_min_days: 14                 # SB / SD：≥14 天 → 成熟
+    mixed_policy: stricter             # 混算从严（含 SB 按 14 天）或分列
+    basis: "Amazon Ads「Ad campaign attribution」：按点击日记转化；SP 回溯约 7 天、品牌类约 14 天"
+    source: {section: "§2.4", blocks: ["dfd282d6-6afc-4e22-a1a4-dfa1d2c175d5", "6f8c2cf8-699f-46d3-932e-e35c2c6e2f4f"]}
+
+  data_window:
+    t2_offset_days: 2                  # 周检取数窗 T-2（只挡进报表延迟，不代替成熟度）
+
+  zero_conversion:
+    radar_spend_gbp: 2.00              # 零转化雷达初筛：spend ≥ £2
+    bar_clicks_rule: "1 / 组 CVR"      # 进单门槛①：Clicks ≥ 组平均出单点击数
+    bar_clicks_default_range: [10, 12] # 缺组 CVR 时默认约 10～12 次点击
+    bar_spend_gbp: 5.00                # 进单门槛②：单项花费 ≥ £5.00
+    insufficient_sample_clicks: 8      # 点击 <8 且仅因 spend≥£2 入雷达 → 「样本不足观察」
+    source: {section: "§3.2 第2条", block: "dd0e542b-d885-4269-980c-61ee2e6076d1"}
+
+  bid_adjustment:
+    observation_window_days: 30        # 观察窗（建议 30 天）
+    min_clicks_for_bid_action: 20      # 点击 <20 → 「继续观察」（Gordon 2026-10-30 由 30 改 20）
+    max_single_change_pct: 15          # 单次建议变动 ≤ ±15%
+    uk_floor_gbp: 0.10                 # UK 出价上下沿
+    uk_ceiling_gbp: 2.00               # 不适用 USD 文档默认 max≈5
+    formula: "建议出价 ≈ 目标 ACOS × 预估 CVR × 客单价（恒等式，无拟合参数；仅解释与 sanity check 用，非自动执行）"
+    source: {section: "§3.3", blocks: ["41cbc829-ed77-491e-b553-8f41e7b3df81", "34ca1193-e7ee-4e1b-94cc-3c701881a728", "c54ab134-247a-498d-af06-b2d76869baad", "2e1e6de3-5678-4e2b-bb33-a9788f6b2060"]}
+
+  cvr_estimation:
+    window_weights: {d7: 0.5, d14: 0.3, d30: 0.2}   # 近 7/14/30 日加权；某窗无数据 → 重归一化
+    prior_group: whitelist_group       # 小样本对白名单组先验 CVR 收缩（Gordon 2026-10-26 定）
+    prior_exclusions: "不用全店大盘、不按单 SKU"
+    immature_day_policy: "未满 §2.4 的日子不进转化侧加权（权重归零后重归一）"
+    source: {section: "§3.3 估 CVR", block: "f4c65447-9c02-4d80-a807-b3be33ccbe50"}
+
+  acceptance:
+    window_default: "7 天或下期周检"
+    observation_window_policy: "实际观察窗 = max(默认验证窗(7 天或下期周检), 归因满窗(HR-01/02 的 SP 7 天 / SB·SD 14 天))——合成规则经 Gordon 2026-11-14 确认（F5）"
+    weekly_deviation_review_pct: 20    # |实际−目标|/目标 > 20% → 标「需回看」
+    source: {section: "§3.5 / §1 第5条", blocks: ["e0ec762d-6a45-4dec-bb3b-c7097c245251", "73147d60-6b69-42ea-bd67-b2c526a74927"]}
+
+  store_scope:
+    profile: "1531098959787693"        # 昕信主店
+    sids: [17570]
+    profit_source: "finance_page_list_msku（A4；按 ASIN 聚合，与广告 spends 分列）"
+    source: {section: "页首口径与日期 / §2.2", block: "e2b639b4-2a88-4d61-98b3-733da80c2b6e"}
+
+  known_inconsistencies:
+    - item: "ads-bid-scripts MIN_CLICKS_30D 仍为 30，与方法论 20 不一致（另案改）"
+      source: {section: "§4 定案表 · 2026-10-30 补丁行", block: "53d7181b-03cf-4d27-b43d-ac81c9a4d139"}
+
+# ============================================================================
+# 第三层 · 运营知识（knowledge）
+# 供 AI 分析与判断时参考；不构成程序强制。
+# ============================================================================
+knowledge:
+  - id: K-01
+    title: 分层分析框架（§2.1）
+    body: >-
+      店级锚：同窗 ad_campaign_report（含清单外、SP/SB 结构）。
+      白名单雷达：products.md 分组（6384 / 6978_6979 等）≠ 昕信全店花费。
+      活动/色：结构问题（高效线顶预算 + 低效线仍烧）vs 单纯加预算。
+      关键词/零转化：否词、暂停、降 bid 的证据层。
+    source: {section: "§2.1", blocks: ["ce0c1d17-cca8-49ae-9936-3c4ea27edcd4", "6cff684b-1340-4371-99b0-4d33de26ba62", "fbef57b3-584a-4bad-a48a-a9783f755a3d", "f986baab-04c1-43e1-a474-33a849bc322d"]}
+
+  - id: K-02
+    title: 问题类型三分与处置原则（§3.0）
+    body: >-
+      结构问题（好线 ACOS 低但 OUT_OF_BUDGET，差线仍烧）→ 优先挪预算/停差色差词；
+      禁止先整体加日预算。量的问题（好线有余量、组 ACOS 近目标、量不够）→
+      才考虑加预算或略抬 bid。状态断崖（花费骤降）→ 先查 paused/断货，再谈加钱或恢复。
+    source: {section: "§3.0", block: "5e87a0fc-d0a6-48de-8e69-f4825e341c57"}
+
+  - id: K-03
+    title: 每日预算/开关决策表（§3.1）
+    body: >-
+      高效活动（如 Core Exact ACOS ~18%）频繁顶预算 → 加预算或从低效线挪来，先解决顶预算；
+      低效活动（如 Phrase ACOS 70%+）仍烧 → 减预算或关，不与高效线「整体加」；
+      整活动开关仅当多数词差或需一刀切，否则优先词级；
+      恢复已 paused 默认不恢复，若恢复先 Exact/Auto、Phrase 后置，防多组抢预算。
+    source: {section: "§3.1", block: "462cb148-e797-4183-9531-ed99ea047820"}
+
+  - id: K-04
+    title: 否词/暂停由轻到重（§3.2）
+    body: >-
+      有转化但偏贵 → 先降 bid，不否不停；Phrase/Auto 垃圾大词 → 精确否定优先于整活动停；
+      否词分档（不依赖活动启停的可立即做；挂「可能整停」活动上的先确认活动是否还开）；
+      过宽风险：短头词须标「可能误杀」，建议拍板或挂下周回看主词订单；
+      Exact 上可逆性要求高时，满足门槛且已成熟者优先「暂停投放」而非永久否词。
+    source: {section: "§3.2", blocks: ["ca480e01-73dc-4b1f-86b3-34fc0b0faef1", "058d0642-6925-4bf4-9a6b-1743a1c31b97", "819d42aa-26f6-43fd-9361-3dae9df3763f", "69104c07-cfd3-4da4-9e07-84ca85d4e9b7", "dd0e542b-d885-4269-980c-61ee2e6076d1"]}
+
+  - id: K-05
+    title: bid 决策入口与「无死公式」（§3.3）
+    body: >-
+      ACOS 明显高于目标但仍有单 → 下调 bid，写验收窗；ACOS 好且常顶预算 → 优先加预算，
+      不先狂加 bid；ACOS 差且 0 单 → 走暂停/否词，不纠结微调 bid；
+      CPC 环比猛涨 → 先查竞争/匹配/是否只剩贵点击；无「固定降 20%」死公式。
+      恒等式仅解释「为何建议降/抬」与 sanity check，不把公式输出当作已批后台出价。
+    source: {section: "§3.3", blocks: ["526787d3-d6a1-47b0-ae5d-a6df05cfbe61", "c9659809-b59e-411a-ac98-f297214676c9", "f25ae584-b500-4c1c-be94-2310ebc82bfb", "690caada-58ca-4f54-8512-aaeec05077fa"]}
+
+  - id: K-06
+    title: 投放模式偏好（§3.4）
+    body: >-
+      控 ACOS 的 Core 转化词 → Exact（或窄匹配）+ 相对保守竞价；
+      拓词且可接受更高 ACOS → Phrase/Auto + 零转化巡检与否词；
+      up-and-down vs down-only：ACOS 已超目标或结构仍乱 → 更保守（偏 down only/偏低），
+      余量大要冲量才更激进；精细旋钮可交投手，本岗写清对组 ACOS/销量的影响。
+    source: {section: "§3.4", blocks: ["0263bec6-c7fc-4af3-a6b7-c44b1e8df9b2", "0579d895-a9fa-4a25-9ac4-57777f73fef5", "a493aa35-daa3-43a4-b4e5-f40824b9447a"]}
+
+  - id: K-07
+    title: 验收判定（§3.5）
+    body: >-
+      有效：同口径下 ACOS 改善且订单未塌（或花费降而销售持稳）。
+      需再调：同口径 ACOS 继续恶化，或主词/组合订单明显掉且无品类理由（仍由 Gordon 改后台，H1）。
+      周偏差回看（可选量化）：|实际 ACOS − 目标 ACOS|/目标 > 20% → 标「需回看」，
+      复核 CVR 窗、失效条件、结构；与定性并列，不替代待批四件套的验证窗表述。
+    source: {section: "§3.5", blocks: ["03b29611-86bf-44b9-926e-926d3a1511db", "b065695b-a91e-4e5f-9933-ace16ae6cbfb", "e0ec762d-6a45-4dec-bb3b-c7097c245251"]}
+
+  - id: K-08
+    title: 归因拆解铁律（§1 第7条，2026-10-29 补）
+    body: >-
+      凡解释跨期、跨窗或变体间的 ACOS 差异，必须显式对比 CPC（点击单价）、
+      CVR（转化率）、ASP（客单价）三个中间量，并指出真实底层驱动；
+      严禁「可能效率在修」「主因可能含结构微调」等无指标支撑的猜测性表述。
+      中间量须与事实表（或同窗 raw）的 Clicks/Spend/Orders/Sales 列可复核对齐；
+      缺任一列写「今天拿不到该中间量」。
+    source: {section: "§1 第7条", block: "c79026eb-21f9-431f-8074-1246395596a8"}
+
+  - id: K-09
+    title: 证据强度与结论边界（§1 第8条）
+    body: >-
+      满足时间窗口和样本门槛只代表可进入相应流程，不代表结论必然可靠；
+      须结合订单量、数据波动和同期变化判断证据强度，小样本或波动大时标观察。
+      前后指标变化只能证明指标变化，不能自动证明由某项操作造成；
+      须检查同期价格、促销、库存、Listing、流量及竞争变化。
+      CTR/CPC/CVR/ACOS/TACOS 和产品利润服务不同层级决策，不得用单一指标替代整体经营判断。
+      证据不足时明确写出限制，不强行给出确定结论。
+    source: {section: "§1 第8条", block: "cf725edf-6257-4b75-a1e4-ebe27c47f33c"}
+
+  - id: K-10
+    title: 失效再人工条件（§3.0/§3.3 脚注）
+    body: >-
+      出现下列情况后，既有 bid 建议或模型结论视为失效，须重新取证再出待批：
+      断货或可售骤降；跟卖/竞品明显压价；换主图或改售价；高客单订单严重滞后于点击窗；
+      新品冷启动样本不足。结构未解时，禁止用「调 bid」代替挪预算或停差线。
+    source: {section: "§3.0 / §3.3", blocks: ["e34f9c2c-158f-4c07-a947-e0234fd8c583", "5622224d-0d8a-41e6-a312-68701b325575"]}
+
+  - id: K-11
+    title: 异常判定与环比纪律（§2.3）
+    body: >-
+      环比阈值（ACOS/CPC/花费断崖）→ 回查活动/词状态（paused vs 断货）；
+      零基数周不当「全绿」（防假阴性）；处置后挂下周窗验收（例：2026-10-26 词级处置 → W44），
+      单量/ACOS 正式结论须满足 §2.4 成熟度。
+    source: {section: "§2.3", blocks: ["5e21a030-0182-4937-b5a5-306291ae4859", "8e4d644b-7864-4cdc-a9b8-be52be46a2d2", "40d7c4e5-e331-4ed5-94bf-04d71ba2e58f"]}
+
+  - id: K-12
+    title: 交付顺序与最少数据原则（§1 第1、4条）
+    body: >-
+      先复用已有周检/抽检/台账/上层分析，缺什么再补最少数据。
+      交付顺序：结论 → 关键证据 → 建议动作 → 待确认；无显著异常只回一句收口。
+    source: {section: "§1 第1、4条", blocks: ["1652c8df-f430-46bf-a63b-1d7ba8c8c1c6", "fd9acb65-2c6c-4d2c-8d65-26eddbcf74b9"]}
+
+  - id: K-13
+    title: 适用范围与转交边界（§0）
+    body: >-
+      适用：白名单与店级广告花费/ACOS/结构诊断；周检上层分析、词级/活动级待批建议；
+      毛利×广告同店同窗对照（A4）；处置后验收清单。
+      转交：日常前台巡检（助理）；PPC 专项操盘细则（「合理烧钱的广告投手」，本岗量化经营影响）；
+      SKU 利润费用核算（财务）；补货（供应链）；写广告/卖家后台（H1：仅 Gordon）。
+    source: {section: "§0", block: "cf95115f-696e-461e-8252-881e4b7ec8a6"}
+
+  - id: K-14
+    title: 词级 bid 取数方式（§3.3）
+    body: >-
+      优先领星 MCP 导与恒等式同口径的 Targeting/关键词日报（或等价），由运营数据分析操作；
+      亦可基于历史已落盘累积数据提取/计算。取数结果写清窗与出处；
+      若 MCP/接口出现费用或额度异常，先报 Gordon。
+    source: {section: "§3.3 取数", block: "cee57a22-68be-44da-925e-bcbb1b681d07"}
+
+# ============================================================================
+# 外部资产 → 系统对象映射（落地参考，非规则本体）
+# F4 决议（Gordon 2026-11-14）：方法论依赖的 box 侧外部资产不在阶段一从 box 导入；
+# 系统在新环境配置，由执行 Agent 按下列映射在新环境中重新构建
+#（白名单分组 → 产品档案初始 YAML；历史事实 → 系统事实层随真实导入累积；
+#  行动台账 → Action/Observation/Evaluation 随业务流程产生）。
+# ============================================================================
+asset_mapping:
+  - {methodology_asset: "products.md 白名单分组（6384 / 6978_6979 等）", system_object: "ProductProfile.D 市场信息 + E 广告经营信息（分组归属字段）；阶段一由执行 Agent 依新环境重建初始档案"}
+  - {methodology_asset: "box 事实表 reviews/ads-weekly-audit/facts/*.md", system_object: "facts 层 MetricSnapshot（分析上下文包必须引用事实批次，见 HR-19）；随真实报表导入重新累积，不迁移 box 历史文件"}
+  - {methodology_asset: "行动台账 products/ads-check/广告行动验证台账_昕信.md", system_object: "Action / Observation / Evaluation（阶段三实现后随流程产生）"}
+  - {methodology_asset: "领星 MCP 取数", system_object: "外部数据来源层（源适配器之一，见架构 D11）"}
+  - {methodology_asset: "apollo-ai-bid-skill 批量算价脚本", system_object: "阶段一不接入；仅备注边界（算出价只进待批，HR-17）"}
+  - {methodology_asset: "chains/fact-then-judge.md §1 规程", system_object: "分析流程编排（ads_core.analysis）"}

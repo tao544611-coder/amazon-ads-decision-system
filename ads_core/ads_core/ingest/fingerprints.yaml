@@ -1,0 +1,120 @@
+# 报表指纹种子（识别器配置 · 数据驱动，Q3 决议）
+# 阶段一种子：亚马逊广告控制台 bulk 下载·英文列名（SP 全类型 + campaign 通用骨架含 SB）。
+# 校准记录（O-1，2026-11-14）：依 samples/raw-reports 真实表头校准——
+#   1) 后台下载报表无 Campaign Id / Ad Group Id / Keyword Id 列，以 Campaign Name /
+#      Ad Group Name 作业务键（canonical 列沿用 campaign_id/adgroup_id 装 name，
+#      lineage 记录来源列）；
+#   2) SP Targeting 报表特征列 = Top-of-search Impression Share（区分 vs adgroup）；
+#   3) campaign/placement/target 的 negative 增加 advertised asin/sku，防止与
+#      advertised_product 并列满分；
+#   4) 领星中文报表与本地清洗派生 csv 不在本版覆盖范围（D11：后续增补适配器）。
+#
+# 结构约定：
+#   required:  必要列组列表；组内 any_of=命中任一即通过，all_of=全命中才通过
+#   distinguishing: 区分列（加分项），any_of
+#   negative:  排除列组列表，组内任一命中则该类型判 unknown
+#   列名匹配前统一归一化：去 BOM → strip → 连续空白折叠为单空格 → 小写
+# 归因窗：从列名中的 "n day" 前缀推断（7/14/30），跳过 '1 day' 点击窗，取首个转化窗
+
+version: 1
+
+metric_aliases:
+  impressions: ["impressions"]
+  clicks: ["clicks"]
+  spend: ["spend", "cost"]
+  orders: ["orders", "7 day total orders (#)", "14 day total orders (#)", "30 day total orders (#)"]
+  sales: ["sales", "7 day total sales", "14 day total sales", "30 day total sales"]
+  units: ["units", "7 day total units (#)", "14 day total units (#)", "30 day total units (#)"]
+
+report_types:
+  campaign:
+    required:
+      - any_of: ["date", "start date"]
+      - any_of: ["campaign id", "campaign name"]
+      - all_of: ["impressions", "clicks"]
+      - any_of: ["spend", "cost"]
+    distinguishing:
+      - any_of: ["portfolio name"]
+    negative:
+      - ["ad group id", "ad group name", "customer search term", "placement",
+         "keyword or product targeting", "targeting", "advertised asin", "advertised sku",
+         "purchased asin", "other asin"]
+
+  adgroup:
+    required:
+      - any_of: ["date", "start date"]
+      - any_of: ["campaign id", "campaign name"]
+      - any_of: ["ad group id", "ad group name"]
+      - all_of: ["impressions", "clicks"]
+      - any_of: ["spend", "cost"]
+    distinguishing:
+      - any_of: ["ad group name"]
+    negative:
+      - ["customer search term", "keyword or product targeting", "targeting",
+         "advertised asin", "advertised sku"]
+
+  target:
+    required:
+      - any_of: ["date", "start date"]
+      - any_of: ["campaign id", "campaign name"]
+      - any_of: ["ad group id", "ad group name"]
+      - any_of: ["keyword or product targeting", "targeting"]
+      - any_of: ["match type"]
+      - all_of: ["impressions", "clicks"]
+      - any_of: ["spend", "cost"]
+    distinguishing:
+      - any_of: ["keyword id", "top-of-search impression share"]
+    negative:
+      - ["customer search term", "advertised asin", "advertised sku"]
+
+  searchterm:
+    required:
+      - any_of: ["date", "start date"]
+      - any_of: ["campaign id", "campaign name"]
+      - any_of: ["customer search term"]
+      - all_of: ["impressions", "clicks"]
+      - any_of: ["spend", "cost"]
+    distinguishing:
+      - any_of: ["keyword or product targeting", "targeting"]
+    negative:
+      - ["advertised asin", "advertised sku"]
+
+  placement:
+    required:
+      - any_of: ["date", "start date"]
+      - any_of: ["campaign id", "campaign name"]
+      - any_of: ["placement"]
+      - all_of: ["impressions", "clicks"]
+      - any_of: ["spend", "cost"]
+    distinguishing: []
+    negative:
+      - ["ad group id", "ad group name", "customer search term",
+         "advertised asin", "advertised sku"]
+
+  advertised_product:
+    required:
+      - any_of: ["date", "start date"]
+      - any_of: ["campaign id", "campaign name"]
+      - any_of: ["advertised asin", "asin"]
+      - any_of: ["advertised sku"]
+      - all_of: ["impressions", "clicks"]
+      - any_of: ["spend", "cost"]
+    distinguishing:
+      - any_of: ["ad group id", "ad group name"]
+    negative:
+      - ["customer search term", "purchased asin", "other asin"]
+
+  purchased_product:
+    required:
+      - any_of: ["date", "start date"]
+      - any_of: ["campaign id", "campaign name"]
+      - any_of: ["advertised asin"]
+      - any_of: ["purchased asin", "other asin"]
+      - all_of: ["impressions", "clicks"]
+      - any_of: ["spend", "cost"]
+    distinguishing: []
+    negative: []
+
+# 置信阈值（设计 §2.3；无区分列配置的类型区分项视为满足，见 detector.py 实现注记）
+confidence_threshold: 0.85
+margin: 0.1

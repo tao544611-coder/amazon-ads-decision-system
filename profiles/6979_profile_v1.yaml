@@ -1,0 +1,39 @@
+# 产品档案 payload · 6979 电加热饭盒（v1 初始建档）
+# 数据来源：products.md（白名单清单）+ W46 facts（2026-11-12 领星取数）+ 行动验证台账_昕信
+A_basic:
+  asin: B0H8YN7YX7
+  title: 6979 电加热饭盒
+  category: 电加热饭盒
+  brand: YISSVIC
+  variants:
+    - {asin: B0H8YN7YX7, name: "blue black 黑青"}
+    - {asin: B0H8YQ4Y26, name: "dark gray 深灰"}
+  primary_variant: null
+
+B_operations:
+  marketplace: UK
+  currency: GBP
+  target_acos: 0.25
+  exceptions: []
+
+C_positioning: {}
+
+E_advertising:
+  campaign_group: "6978_6979"
+  main_campaigns:
+    - {campaign_id: "202499238611642", campaign_name: "GJHIUBKNGT-AJZCore Exact", ad_product_type: sp}
+    - {campaign_id: "116990224855579", campaign_name: "GJHIUBKNGT-ACZVehicle Phrase", ad_product_type: sp}
+    - {campaign_id: "183064418684129", campaign_name: "GJHIUBKNGT-ACZPortable Phrase", ad_product_type: sp}
+    - {campaign_id: "105889771836374", campaign_name: "GJHIUBKNGT-ACZOffice Phrase", ad_product_type: sp}
+    - {campaign_id: "210740798701013", campaign_name: "GJHIUBKNGT-ACZDriver Phrase", ad_product_type: sp}
+    - {campaign_id: "29437742665971", campaign_name: "GJHIUBKNGT-AZDAuto", ad_product_type: sp}
+  notes: >-
+    活动为 6978_6979 组共用（W46 facts 2026-11-12 领星取数：同活动两 SKU 均有花费行）；
+    campaign_map 现将共用活动挂 6978（组主执行对象），SKU 级拆分待 Gordon 确认口径。
+    广告 profile：昕信欧AZXXGEU-UK / 1531098959787693（sid 17570）。
+
+F_special:
+  exceptions:
+    - "深灰 暂不停（方法论 §3 页首例外；F3 决议归本档案维护）"
+  business_strategy: >-
+    白名单分组 6978_6979；深灰为新品/观察款。

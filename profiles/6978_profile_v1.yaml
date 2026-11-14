@@ -1,0 +1,40 @@
+# 产品档案 payload · 6978 电加热饭盒（v1 初始建档）
+# 数据来源：products.md（白名单清单）+ W46 facts（2026-11-12 领星取数）+ 行动验证台账_昕信
+A_basic:
+  asin: B0HB4XFV2F
+  title: 6978 电加热饭盒
+  category: 电加热饭盒
+  brand: YISSVIC
+  variants:
+    - {asin: B0HB4XFV2F, name: "blue black 黑青"}
+    - {asin: B0HB4X9MX1, name: "green white 白绿"}
+    - {asin: B0HB59KTZX, name: "dark green 鼠尾草"}
+  primary_variant: null
+
+B_operations:
+  marketplace: UK
+  currency: GBP
+  target_acos: 0.25
+  exceptions: []
+
+C_positioning: {}
+
+E_advertising:
+  campaign_group: "6978_6979"
+  main_campaigns:
+    - {campaign_id: "202499238611642", campaign_name: "GJHIUBKNGT-AJZCore Exact", ad_product_type: sp}
+    - {campaign_id: "116990224855579", campaign_name: "GJHIUBKNGT-ACZVehicle Phrase", ad_product_type: sp}
+    - {campaign_id: "183064418684129", campaign_name: "GJHIUBKNGT-ACZPortable Phrase", ad_product_type: sp}
+    - {campaign_id: "105889771836374", campaign_name: "GJHIUBKNGT-ACZOffice Phrase", ad_product_type: sp}
+    - {campaign_id: "210740798701013", campaign_name: "GJHIUBKNGT-ACZDriver Phrase", ad_product_type: sp}
+    - {campaign_id: "29437742665971", campaign_name: "GJHIUBKNGT-AZDAuto", ad_product_type: sp}
+    - {campaign_id: null, campaign_name: "6978 SB 活动（2026-10-23 领星手建，实名未追；台账 P1-昕信-6978-SB01）", ad_product_type: sb}
+  notes: >-
+    活动为 6978_6979 组共用（W46 facts 2026-11-12 领星取数：同活动两 SKU 均有花费行）；
+    W46 报另有 1 个零花费活动被折叠未显示实名（G-6），待补。
+    广告 profile：昕信欧AZXXGEU-UK / 1531098959787693（sid 17570）。
+
+F_special:
+  business_strategy: >-
+    白名单分组 6978_6979；SB 止损线 = 7 日花费 ≥£25 且 0 单 → 提请再议暂停（不自动停，台账 P1-昕信-6978-SB01）。
+    2026-11-09 已执行 A-6978-1~4（词级减支，回滚线 = 组 ACOS 反弹 >32% 或订单 <36）。

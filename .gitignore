@@ -1,0 +1,18 @@
+# 数据安全（HANDOFF 约束 5）：data/ 与 samples/ 全量忽略，真实经营数据不入库
+# 原始样本包目录同样含真实经营数据（manifest/报表/资产），全量忽略
+data/
+samples/
+ads-system-base-samples_*/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# 本地环境
+.env
+*.log
