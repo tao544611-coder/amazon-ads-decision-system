@@ -24,7 +24,7 @@
 ```
 ads_core/ads_core/{storage,ingest,quality,adapters,canonical,facts,profile,events,methodology}/ + cli.py
 ads_core/alembic/versions/001_initial_stage1.py
-ads_core/tests/（8 个测试文件，39 用例）
+ads_core/tests/（9 个测试文件，38 用例）
 scripts/rebuild_dev_db.sh（全流程演示/复现脚本）
 profiles/6978_profile_v1.yaml、6979_profile_v1.yaml（O-4 初始档案）
 ```
@@ -36,7 +36,7 @@ profiles/6978_profile_v1.yaml、6979_profile_v1.yaml（O-4 初始档案）
 ## 四、测试用例与运行结果
 
 **运行命令**：`.venv/Scripts/python.exe -m pytest tests/ -q`
-**结果：39 passed, 0 failed**（2026-11-14，本机）
+**结果：38 passed, 0 failed**（2026-11-14，本机）
 
 | 组 | 用例数 | 覆盖 |
 |---|---|---|
@@ -46,7 +46,7 @@ profiles/6978_profile_v1.yaml、6979_profile_v1.yaml（O-4 初始档案）
 | test_t5_trace_struct | 1 | facts → batch_refs → raw 文件 → hash 全链追溯 |
 | test_methodology | 4 | 导入完整 / 幂等 / 篡改拒绝 / draft 拒绝 |
 | test_profile_events | 5 | 档案 SCD-2 三版本+diff / campaign 映射 / 事件窗口 / 事件主体校验 / 排名快照 |
-| test_detector | 6 | 7 类识别 / 垃圾表头 unknown / 缺列 unknown / 归因窗 |
+| test_detector | 5 | 7 类识别 / 垃圾表头 unknown / 缺列 unknown / 归因窗 |
 | test_facts_product_grain | 1 | campaign_name 双键映射 → product 粒度出数 |
 | test_calibration_real_samples | 9 | 真实样本表头（6 英文报表识别正确；领星中文×2+本地派生×1 必须 unknown） |
 

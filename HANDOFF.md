@@ -11,14 +11,14 @@
 
 - 需求唯一基线：`docs/requirements-baseline.md`（PRD V1.0 · 2026-11-13，Notion 全文存档）
 - 首期验证范围：SKU 6978 / 6979，UK 站（GBP）
-- 项目当前位置：**阶段一开发完成并全绿交付（T1/T2/T3 + T5 结构项，39 用例），真实样本全流程跑通；下一步阶段二**
+- 项目当前位置：**阶段一开发完成并全绿交付（T1/T2/T3 + T5 结构项，38 用例），真实样本全流程跑通；下一步阶段二**
 
 ## STATUS
 
 **阶段一已交付**（2026-11-14，本设备）：
 
 - 业务引擎 `ads_core/`：20 业务表 + 触发器（Alembic `001_initial_stage1`）、识别器（已按真实样本校准 O-1）、导入管道（file_hash 幂等 + 批次状态机 + QF-01~10）、canonical 7 表、事实指标（公式 + computable 标记 + 成熟度 HR-01/02/04）、产品档案 SCD-2、CLI 15 命令全 `--json`
-- 测试 **39/39 全绿**（合成 fixtures，不依赖真实数据）；真实样本（9 份）全流程：5 批 complete → canonical 8287 行 → facts 8499 行（未成熟占比 7.57% 与数据事实一致）；领星中文 ×2 + 本地派生 ×1 被 QF-01 正确拦截
+- 测试 **38/38 全绿**（合成 fixtures，不依赖真实数据）；真实样本（9 份）全流程：5 批 complete → canonical 8287 行 → facts 8499 行（未成熟占比 7.57% 与数据事实一致）；领星中文 ×2 + 本地派生 ×1 被 QF-01 正确拦截
 - 样本包已登记（32/32 哈希校验通过）：`samples/raw-reports/`（9 份）+ `samples/assets/`
 - O-4 campaign 初始数据已建：6978/6979 档案 v1 + campaign_map 6 条（W46 facts 提取；组共用活动挂 6978 待 Gordon 确认拆分口径；第 7 个零花费活动与 SB 活动无实名未建）
 
@@ -35,7 +35,7 @@
 | `docs/stage1-detailed-design-v1.0.md` | 阶段一实施蓝本（21 表、识别器、状态机、QF、公式、CLI） |
 | **`docs/stage1-delivery.md`** | **阶段一交付文档**（已完成/测试结果/已知问题/实现偏差/未实现） |
 | `ads_core/README.md` | 运行方式 + 管道图 + CLI 表 |
-| `ads_core/` | 引擎代码 + alembic 迁移 + tests（8 文件 39 用例） |
+| `ads_core/` | 引擎代码 + alembic 迁移 + tests（9 文件 38 用例） |
 | `scripts/rebuild_dev_db.sh` | 全流程演示/复现脚本（init→方法论→档案→映射→导入→canonical→facts） |
 | `profiles/6978_profile_v1.yaml`、`6979_profile_v1.yaml` | O-4 初始档案 payload |
 | `scripts/register_samples.py` | 样本登记脚本（哈希校验+复制，已执行 OK 32/32） |
