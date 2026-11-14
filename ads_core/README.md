@@ -45,6 +45,7 @@ cd ads_core
 | `ads facts maturity [--from/--to]` | 未成熟占比统计（QF-10） |
 | `ads product add / profile-update / map-campaign` | 产品、档案 SCD-2、活动映射 |
 | `ads event add / rank-add` | 业务事件、关键词排名快照 |
+| `ads analysis context / show / validate` | 分析上下文包组装（PRD 4.7 七步）· 建议三关校验（D4） |
 | `ads audit [n]` | 审计流水 |
 
 ## 目录

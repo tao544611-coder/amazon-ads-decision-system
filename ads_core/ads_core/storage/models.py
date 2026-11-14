@@ -499,6 +499,61 @@ class MethodologyRule(Base):
     created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
 
 
+# ---------------------------------------------------------------- 分析域（阶段二）
+
+
+class AnalysisRun(Base):
+    __tablename__ = "analysis_run"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('context_ready','validating','proposals_validated',"
+            "'validated_none','failed')",
+            name="run_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=new_id)
+    sku: Mapped[str] = mapped_column(Text, nullable=False)
+    date_from: Mapped[str] = mapped_column(Text, nullable=False)
+    date_to: Mapped[str] = mapped_column(Text, nullable=False)
+    marketplace: Mapped[str] = mapped_column(Text, default="UK", nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="context_ready")
+    methodology_version_id: Mapped[str] = mapped_column(
+        ForeignKey("methodology_version.id"), nullable=False
+    )
+    profile_version_id: Mapped[str] = mapped_column(
+        ForeignKey("product_profile_version.id"), nullable=False
+    )
+    batch_ids_json: Mapped[str] = mapped_column(Text, nullable=False)
+    context_json: Mapped[str] = mapped_column(Text, nullable=False)
+    context_flags_json: Mapped[str | None] = mapped_column(Text)
+    proposals_json: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
+    completed_at: Mapped[str | None] = mapped_column(Text)
+
+
+class Evidence(Base):
+    __tablename__ = "evidence"
+    __table_args__ = (
+        UniqueConstraint("analysis_run_id", "evidence_type", "ref_id", name="uq_evidence"),
+        CheckConstraint(
+            "evidence_type IN ('metric_daily','business_event','keyword_rank',"
+            "'methodology_rule','product_profile')",
+            name="evidence_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=new_id)
+    analysis_run_id: Mapped[str] = mapped_column(
+        ForeignKey("analysis_run.id"), nullable=False
+    )
+    evidence_type: Mapped[str] = mapped_column(Text, nullable=False)
+    ref_id: Mapped[str] = mapped_column(Text, nullable=False)
+    snapshot_json: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
+
+
 # ---------------------------------------------------------------- 系统域
 
 

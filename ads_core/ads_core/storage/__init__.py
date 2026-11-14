@@ -4,6 +4,7 @@
 from .db import get_engine, make_engine, reset_engine, session_scope
 from .models import (
     CANONICAL_TABLES,
+    AnalysisRun,
     AuditLog,
     Base,
     BusinessEvent,
@@ -15,6 +16,7 @@ from .models import (
     CanPurchasedProductDaily,
     CanSearchtermDaily,
     CanTargetDaily,
+    Evidence,
     ImportBatch,
     KeywordRankSnapshot,
     MetricDaily,
@@ -33,6 +35,7 @@ __all__ = [
     "reset_engine",
     "session_scope",
     "CANONICAL_TABLES",
+    "AnalysisRun",
     "Base",
     "AuditLog",
     "BusinessEvent",
@@ -44,6 +47,7 @@ __all__ = [
     "CanPurchasedProductDaily",
     "CanSearchtermDaily",
     "CanTargetDaily",
+    "Evidence",
     "ImportBatch",
     "KeywordRankSnapshot",
     "MetricDaily",

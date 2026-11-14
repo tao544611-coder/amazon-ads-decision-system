@@ -22,6 +22,7 @@ from .methodology import latest_released, methodology_import
 from .profile import map_campaign, update_profile, upsert_product
 from .quality import check_batch_caliber, check_file_level, check_supersede, decide_status
 from .storage import (
+    AnalysisRun,
     AuditLog,
     ImportBatch,
     MethodologyVersion,
@@ -32,7 +33,7 @@ from .storage import (
 )
 from .storage.models import now_iso
 
-app = typer.Typer(add_completion=False, help="亚马逊广告智能优化与决策系统 · 阶段一")
+app = typer.Typer(add_completion=False, help="亚马逊广告智能优化与决策系统")
 methodology_app = typer.Typer(help="方法论版本管理")
 batch_app = typer.Typer(help="导入批次")
 quality_app = typer.Typer(help="质检")
@@ -40,6 +41,7 @@ canonical_app = typer.Typer(help="canonical 统一层")
 facts_app = typer.Typer(help="事实指标")
 product_app = typer.Typer(help="产品与档案")
 event_app = typer.Typer(help="业务事件")
+analysis_app = typer.Typer(help="分析（上下文包 + 建议校验）")
 app.add_typer(methodology_app, name="methodology")
 app.add_typer(batch_app, name="batch")
 app.add_typer(quality_app, name="quality")
@@ -47,6 +49,7 @@ app.add_typer(canonical_app, name="canonical")
 app.add_typer(facts_app, name="facts")
 app.add_typer(product_app, name="product")
 app.add_typer(event_app, name="event")
+app.add_typer(analysis_app, name="analysis")
 
 JSON_OPT = Annotated[bool, typer.Option("--json", help="以 JSON 输出结果")]
 
@@ -514,6 +517,93 @@ def rank_add(
         )
         s.commit()
     _emit({"snapshot_id": snap.id, "keyword": kw, "captured_on": on}, json_out)
+
+
+# ---------------------------------------------------------------- analysis（阶段二）
+
+
+@analysis_app.command("context")
+def analysis_context(
+    sku: str = typer.Option(..., "--sku"),
+    date_from: str = typer.Option(..., "--from"),
+    date_to: str = typer.Option(..., "--to"),
+    top_terms: int = typer.Option(50, "--top-terms"),
+    by: str = typer.Option("cli", "--by"),
+    json_out: JSON_OPT = False,
+    dump_context: bool = typer.Option(False, "--dump", help="同时输出完整上下文包"),
+) -> None:
+    """组装分析上下文包（PRD 4.7 七步 · D3）。"""
+    from .analysis import ContextError, assemble_analysis_context
+
+    try:
+        with session_scope() as s:
+            result = assemble_analysis_context(
+                s, sku=sku, date_from=date_from, date_to=date_to,
+                top_terms=top_terms, actor=by,
+            )
+            s.commit()
+        payload = {
+            "run_id": result.run_id, "status": result.status,
+            "flags": result.flags, "evidence_count": result.evidence_count,
+        }
+        if dump_context:
+            with session_scope() as s:
+                run = s.get(AnalysisRun, result.run_id)
+                payload["context"] = json.loads(run.context_json)
+        _emit(payload, json_out)
+    except ContextError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
+
+
+@analysis_app.command("show")
+def analysis_show(run_id: str, json_out: JSON_OPT = False) -> None:
+    with session_scope() as s:
+        run = s.get(AnalysisRun, run_id)
+        if run is None:
+            _emit({"error": f"分析运行不存在：{run_id}"}, json_out)
+            raise typer.Exit(1)
+        payload = {
+            "run_id": run.id, "sku": run.sku, "status": run.status,
+            "date_range": [run.date_from, run.date_to],
+            "methodology_version_id": run.methodology_version_id,
+            "profile_version_id": run.profile_version_id,
+            "batch_ids": json.loads(run.batch_ids_json),
+            "flags": json.loads(run.context_flags_json or "{}"),
+            "proposals": json.loads(run.proposals_json or "null"),
+        }
+    _emit(payload, json_out)
+
+
+@analysis_app.command("validate")
+def analysis_validate(
+    run_id: str,
+    file: str = typer.Option(..., "--file", help="建议 JSON 文件（单对象或数组）"),
+    by: str = typer.Option("cli", "--by"),
+    json_out: JSON_OPT = False,
+) -> None:
+    """校验 AI 建议（D4 三关：Schema → 硬规则 → 证据存在性）。"""
+    from .analysis import ValidatorError, validate_proposals
+
+    with open(file, encoding="utf-8") as f:
+        data = json.load(f)
+    proposals = data if isinstance(data, list) else [data]
+    try:
+        with session_scope() as s:
+            verdicts = validate_proposals(s, run_id, proposals, actor=by)
+            s.commit()
+        _emit({
+            "run_id": run_id,
+            "total": len(verdicts),
+            "passed": sum(1 for v in verdicts if v.verdict == "passed"),
+            "verdicts": [
+                {"index": v.index, "verdict": v.verdict, "violations": v.violations}
+                for v in verdicts
+            ],
+        }, json_out)
+    except ValidatorError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
 
 
 # ---------------------------------------------------------------- audit
