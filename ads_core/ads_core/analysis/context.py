@@ -121,6 +121,16 @@ def _rank_history(rows: list[KeywordRankSnapshot]) -> list[dict]:
     return out
 
 
+def _related_experience_safe(session: Session, sku: str) -> list[dict]:
+    """相关经验检索（FTS5 表未建/为空时返回空，不阻断组装）。"""
+    try:
+        from ..experience import related_for_context
+
+        return related_for_context(session, sku)
+    except Exception:
+        return []
+
+
 def assemble_analysis_context(
     session: Session,
     sku: str,
@@ -261,6 +271,7 @@ def assemble_analysis_context(
             ],
         },
         "context_flags": flags,
+        "related_experience": _related_experience_safe(session, sku),
         "judgment_requirements": {
             "conclusion_layers": ["已确认事实", "可能原因", "缺少证据的假设", "暂时无法判断"],
             "single_metric_ban": "不得以单一指标变化直接形成结论（PRD 4.7）；ACoS 不单独决定去留",

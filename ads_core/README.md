@@ -46,6 +46,11 @@ cd ads_core
 | `ads product add / profile-update / map-campaign` | 产品、档案 SCD-2、活动映射 |
 | `ads event add / rank-add` | 业务事件、关键词排名快照 |
 | `ads analysis context / show / validate` | 分析上下文包组装（PRD 4.7 七步）· 建议三关校验（D4） |
+| `ads proposal submit/list/approve` | 提案管理（人工审批，审批与执行分离 T6） |
+| `ads action create/list/receipt/rollback` | 动作管理（幂等 T8 · simulated/manual 模式 · 回滚留痕） |
+| `ads observation create/complete` | 观察窗口（F5：max(验证窗, 归因满窗) + 同期干扰自动拉取） |
+| `ads evaluation record` | 效果验收（四裁决 + 归因分层，T7） |
+| `ads experience add/search/list` | 经验库（FTS5 中文检索 · 失败经验保留） |
 | `ads audit [n]` | 审计流水 |
 
 ## 目录

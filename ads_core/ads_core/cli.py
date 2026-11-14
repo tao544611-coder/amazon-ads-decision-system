@@ -42,6 +42,11 @@ facts_app = typer.Typer(help="事实指标")
 product_app = typer.Typer(help="产品与档案")
 event_app = typer.Typer(help="业务事件")
 analysis_app = typer.Typer(help="分析（上下文包 + 建议校验）")
+proposal_app = typer.Typer(help="提案管理")
+action_app = typer.Typer(help="广告动作")
+observation_app = typer.Typer(help="观察窗口")
+evaluation_app = typer.Typer(help="效果验收")
+experience_app = typer.Typer(help="经验库")
 app.add_typer(methodology_app, name="methodology")
 app.add_typer(batch_app, name="batch")
 app.add_typer(quality_app, name="quality")
@@ -50,6 +55,11 @@ app.add_typer(facts_app, name="facts")
 app.add_typer(product_app, name="product")
 app.add_typer(event_app, name="event")
 app.add_typer(analysis_app, name="analysis")
+app.add_typer(proposal_app, name="proposal")
+app.add_typer(action_app, name="action")
+app.add_typer(observation_app, name="observation")
+app.add_typer(evaluation_app, name="evaluation")
+app.add_typer(experience_app, name="experience")
 
 JSON_OPT = Annotated[bool, typer.Option("--json", help="以 JSON 输出结果")]
 
@@ -604,6 +614,291 @@ def analysis_validate(
     except ValidatorError as exc:
         _emit({"error": str(exc)}, json_out)
         raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------- 阶段三：决策链
+
+
+@proposal_app.command("submit")
+def proposal_submit(run_id: str, by: str = typer.Option("cli", "--by"), json_out: JSON_OPT = False) -> None:
+    """通过校验的建议迁入提案（pending_approval）。"""
+    from .decision import DecisionError, submit_proposals
+
+    try:
+        with session_scope() as s:
+            r = submit_proposals(s, run_id, actor=by)
+            s.commit()
+        _emit({"run_id": run_id, "created": r.created,
+               "skipped_verdict": r.skipped_verdict, "skipped_existing": r.skipped_existing}, json_out)
+    except DecisionError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
+
+
+@proposal_app.command("list")
+def proposal_list(
+    status: Optional[str] = typer.Option(None, "--status"),
+    json_out: JSON_OPT = False,
+) -> None:
+    from .storage import Proposal
+
+    with session_scope() as s:
+        stmt = select(Proposal).order_by(Proposal.created_at.desc())
+        if status:
+            stmt = stmt.where(Proposal.status == status)
+        rows = [
+            {"id": p.id, "sku": p.sku, "target": p.target, "action_type": p.action_type,
+             "status": p.status, "analysis_run_id": p.analysis_run_id}
+            for p in s.scalars(stmt).all()
+        ]
+    _emit({"proposals": rows, "count": len(rows)}, json_out)
+
+
+@proposal_app.command("approve")
+def proposal_approve(
+    proposal_id: str,
+    decision: str = typer.Option(..., "--decision", help="approve|modify|reject|defer"),
+    by: str = typer.Option(..., "--by"),
+    file: Optional[str] = typer.Option(None, "--file", help="修改稿 JSON（modify 必填）"),
+    comment: Optional[str] = typer.Option(None, "--comment"),
+    json_out: JSON_OPT = False,
+) -> None:
+    """人工审批（T6：审批与执行分离）。"""
+    from .decision import DecisionError, approve_proposal
+
+    decision_map = {"approve": "approve", "modify": "modify_approve",
+                    "reject": "reject", "defer": "defer"}
+    real = decision_map.get(decision, decision)
+    modified = None
+    if file:
+        with open(file, encoding="utf-8") as f:
+            modified = json.load(f)
+    try:
+        with session_scope() as s:
+            approval = approve_proposal(
+                s, proposal_id, real, decided_by=by,
+                modified_payload=modified, comment=comment,
+            )
+            s.commit()
+        _emit({"approval_id": approval.id, "proposal_id": proposal_id, "decision": real,
+               "self_approval": bool(approval.self_approval)}, json_out)
+    except DecisionError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
+
+
+@action_app.command("create")
+def action_create(
+    proposal_id: str,
+    mode: str = typer.Option("simulated", "--mode", help="simulated|manual"),
+    executor: Optional[str] = typer.Option(None, "--executor"),
+    rollback_file: Optional[str] = typer.Option(None, "--rollback-file", help="回滚策略 JSON"),
+    by: str = typer.Option("cli", "--by"),
+    json_out: JSON_OPT = False,
+) -> None:
+    """创建动作（须已审批，T6；幂等，T8）。"""
+    from .decision import DecisionError, create_action
+
+    policy = None
+    if rollback_file:
+        with open(rollback_file, encoding="utf-8") as f:
+            policy = json.load(f)
+    try:
+        with session_scope() as s:
+            action, created = create_action(
+                s, proposal_id, executor=executor or by, execute_mode=mode,
+                rollback_policy=policy, actor=by,
+            )
+            s.commit()
+        _emit({"action_id": action.id, "created": created, "status": action.status,
+               "idempotency_key": action.idempotency_key}, json_out)
+    except DecisionError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
+
+
+@action_app.command("list")
+def action_list(status: Optional[str] = typer.Option(None, "--status"), json_out: JSON_OPT = False) -> None:
+    from .storage import Action as _Action
+
+    with session_scope() as s:
+        stmt = select(_Action).order_by(_Action.created_at.desc())
+        if status:
+            stmt = stmt.where(_Action.status == status)
+        rows = [
+            {"id": a.id, "proposal_id": a.proposal_id, "status": a.status,
+             "mode": a.execute_mode, "verify_status": a.verify_status,
+             "rollback": a.status == "rolled_back"}
+            for a in s.scalars(stmt).all()
+        ]
+    _emit({"actions": rows, "count": len(rows)}, json_out)
+
+
+@action_app.command("receipt")
+def action_receipt(
+    action_id: str,
+    result: str = typer.Option(..., "--result", help="success|failed|unknown"),
+    operator: Optional[str] = typer.Option(None, "--operator"),
+    file: Optional[str] = typer.Option(None, "--file", help="回执 JSON（before/after/raw）"),
+    by: str = typer.Option("cli", "--by"),
+    json_out: JSON_OPT = False,
+) -> None:
+    """录入执行回执（T8：unknown → state_unknown，禁止盲目重执行）。"""
+    from .decision import DecisionError, record_receipt
+
+    payload = {}
+    if file:
+        with open(file, encoding="utf-8") as f:
+            payload = json.load(f)
+    try:
+        with session_scope() as s:
+            action = record_receipt(
+                s, action_id, result=result, operator=operator or by,
+                before_state=payload.get("before"), after_state=payload.get("after"),
+                raw=payload.get("raw"), actor=by,
+            )
+            s.commit()
+        _emit({"action_id": action_id, "status": action.status,
+               "verify_status": action.verify_status}, json_out)
+    except DecisionError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
+
+
+@action_app.command("rollback")
+def action_rollback(
+    action_id: str,
+    reason: str = typer.Option(..., "--reason"),
+    by: str = typer.Option(..., "--by"),
+    json_out: JSON_OPT = False,
+) -> None:
+    from .decision import DecisionError, rollback_action
+
+    try:
+        with session_scope() as s:
+            rollback_action(s, action_id, reason=reason, by=by)
+            s.commit()
+        _emit({"action_id": action_id, "status": "rolled_back"}, json_out)
+    except DecisionError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
+
+
+@observation_app.command("create")
+def observation_create(action_id: str, by: str = typer.Option("cli", "--by"), json_out: JSON_OPT = False) -> None:
+    from .decision import DecisionError, create_observation
+
+    try:
+        with session_scope() as s:
+            obs = create_observation(s, action_id, actor=by)
+            s.commit()
+        _emit({"observation_id": obs.id, "action_id": action_id,
+               "window": [obs.window_start, obs.window_end], "status": obs.status}, json_out)
+    except DecisionError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
+
+
+@observation_app.command("complete")
+def observation_complete(observation_id: str, by: str = typer.Option("cli", "--by"), json_out: JSON_OPT = False) -> None:
+    from .decision import DecisionError, complete_observation
+
+    try:
+        with session_scope() as s:
+            obs = complete_observation(s, observation_id, actor=by)
+            s.commit()
+        _emit({"observation_id": obs.id, "status": obs.status,
+               "post_rows": len(json.loads(obs.post_data_json or "{}").get("rows", []))}, json_out)
+    except DecisionError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
+
+
+@evaluation_app.command("record")
+def evaluation_record(
+    action_id: str,
+    verdict: str = typer.Option(..., "--verdict", help="valid|invalid|negative|insufficient_evidence"),
+    attribution_file: str = typer.Option(..., "--attribution-file", help="归因分层 JSON（四键）"),
+    by: str = typer.Option(..., "--by"),
+    evidence_strength: str = typer.Option("medium", "--strength"),
+    maturity_note: Optional[str] = typer.Option(None, "--maturity-note"),
+    json_out: JSON_OPT = False,
+) -> None:
+    """效果验收（T7：四裁决 + 归因分层；干扰未排除不得强行判定）。"""
+    from .decision import DecisionError, record_evaluation
+
+    with open(attribution_file, encoding="utf-8") as f:
+        attribution = json.load(f)
+    try:
+        with session_scope() as s:
+            ev = record_evaluation(
+                s, action_id, verdict=verdict, attribution=attribution,
+                decided_by=by, evidence_strength=evidence_strength,
+                maturity_note=maturity_note, actor=by,
+            )
+            s.commit()
+        _emit({"evaluation_id": ev.id, "action_id": action_id, "verdict": ev.verdict,
+               "rollback_suggested": bool(ev.rollback_suggested)}, json_out)
+    except DecisionError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
+
+
+@experience_app.command("add")
+def experience_add(
+    file: str = typer.Option(..., "--file", help="经验 YAML/JSON"),
+    by: str = typer.Option(..., "--by"),
+    json_out: JSON_OPT = False,
+) -> None:
+    from .experience import ExperienceError, add_experience
+
+    p = Path(file)
+    data = (
+        json.loads(p.read_text(encoding="utf-8")) if p.suffix == ".json"
+        else yaml_safe_load(p)
+    )
+    try:
+        with session_scope() as s:
+            exp = add_experience(s, actor=by, created_by=by, **data)
+            s.commit()
+        _emit({"experience_id": exp.id, "exp_code": exp.exp_code, "status": exp.status}, json_out)
+    except ExperienceError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
+
+
+def yaml_safe_load(p: Path) -> dict:
+    import yaml as _yaml
+
+    return _yaml.safe_load(p.read_text(encoding="utf-8"))
+
+
+@experience_app.command("search")
+def experience_search(query: str, limit: int = typer.Option(5, "--limit"), json_out: JSON_OPT = False) -> None:
+    from .experience import search_experience
+
+    with session_scope() as s:
+        hits = search_experience(s, query, limit=limit)
+    _emit({"query": query, "hits": [
+        {"exp_code": h.exp_code, "scenario": h.scenario, "status": h.status, "rank": h.rank}
+        for h in hits
+    ]}, json_out)
+
+
+@experience_app.command("list")
+def experience_list(status: Optional[str] = typer.Option(None, "--status"), json_out: JSON_OPT = False) -> None:
+    from .storage import Experience as _Experience
+
+    with session_scope() as s:
+        stmt = select(_Experience).order_by(_Experience.created_at.desc())
+        if status:
+            stmt = stmt.where(_Experience.status == status)
+        rows = [
+            {"id": e.id, "exp_code": e.exp_code, "scenario": e.scenario,
+             "status": e.status, "strength": e.evidence_strength}
+            for e in s.scalars(stmt).all()
+        ]
+    _emit({"experiences": rows, "count": len(rows)}, json_out)
 
 
 # ---------------------------------------------------------------- audit

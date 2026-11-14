@@ -32,7 +32,8 @@ NAMING_CONVENTION = {
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # 微秒精度：同事务内多次创建（如连续审批）仍可按时间稳定排序
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
 def new_id() -> str:
@@ -552,6 +553,193 @@ class Evidence(Base):
     ref_id: Mapped[str] = mapped_column(Text, nullable=False)
     snapshot_json: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
+
+
+# ---------------------------------------------------------------- 决策链域（阶段三）
+
+
+class Proposal(Base):
+    __tablename__ = "proposal"
+    __table_args__ = (
+        UniqueConstraint("analysis_run_id", "proposal_index", name="uq_proposal_run_index"),
+        CheckConstraint(
+            "status IN ('pending_approval','approved','approved_modified','rejected','deferred')",
+            name="proposal_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=new_id)
+    analysis_run_id: Mapped[str] = mapped_column(
+        ForeignKey("analysis_run.id"), nullable=False
+    )
+    proposal_index: Mapped[int] = mapped_column(nullable=False)
+    sku: Mapped[str] = mapped_column(Text, nullable=False)
+    target: Mapped[str] = mapped_column(Text, nullable=False)
+    action_type: Mapped[str] = mapped_column(Text, nullable=False)
+    current_value_json: Mapped[str | None] = mapped_column(Text)
+    proposed_value_json: Mapped[str | None] = mapped_column(Text)
+    adjustment: Mapped[str | None] = mapped_column(Text)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    methodology_version_id: Mapped[str] = mapped_column(
+        ForeignKey("methodology_version.id"), nullable=False
+    )
+    profile_version_id: Mapped[str] = mapped_column(
+        ForeignKey("product_profile_version.id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending_approval")
+    created_by: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
+
+
+class Approval(Base):
+    __tablename__ = "approval"
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('approve','modify_approve','reject','defer')", name="approval_decision"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=new_id)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("proposal.id"), nullable=False)
+    decision: Mapped[str] = mapped_column(Text, nullable=False)
+    decided_by: Mapped[str] = mapped_column(Text, nullable=False)
+    decided_at: Mapped[str] = mapped_column(Text, nullable=False)
+    final_payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text)
+    self_approval: Mapped[int] = mapped_column(default=0, nullable=False)  # O3-1 留痕
+    created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
+
+
+class Action(Base):
+    __tablename__ = "action"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','executing','executed','execution_failed',"
+            "'rolled_back','cancelled')",
+            name="action_status",
+        ),
+        CheckConstraint("execute_mode IN ('simulated','manual')", name="action_mode"),
+        CheckConstraint(
+            "verify_status IN ('unverified','verified','state_unknown')", name="action_verify"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=new_id)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("proposal.id"), nullable=False)
+    approval_id: Mapped[str] = mapped_column(ForeignKey("approval.id"), nullable=False)
+    action_type: Mapped[str] = mapped_column(Text, nullable=False)
+    target_json: Mapped[str | None] = mapped_column(Text)
+    original_value_json: Mapped[str | None] = mapped_column(Text)
+    final_value_json: Mapped[str | None] = mapped_column(Text)
+    execute_mode: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    approved_by: Mapped[str] = mapped_column(Text, nullable=False)
+    executor: Mapped[str] = mapped_column(Text, nullable=False)
+    executed_at: Mapped[str | None] = mapped_column(Text)
+    result_json: Mapped[str | None] = mapped_column(Text)
+    verify_status: Mapped[str] = mapped_column(Text, nullable=False, default="unverified")
+    rollback_policy_json: Mapped[str | None] = mapped_column(Text)
+    idempotency_key: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
+
+
+class ExecutionReceipt(Base):
+    __tablename__ = "execution_receipt"
+    __table_args__ = (
+        CheckConstraint(
+            "receipt_type IN ('simulated','manual','agent')", name="receipt_type"
+        ),
+        CheckConstraint("result IN ('success','failed','unknown')", name="receipt_result"),
+    )
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=new_id)
+    action_id: Mapped[str] = mapped_column(ForeignKey("action.id"), nullable=False)
+    receipt_type: Mapped[str] = mapped_column(Text, nullable=False)
+    operator: Mapped[str] = mapped_column(Text, nullable=False)
+    operated_at: Mapped[str] = mapped_column(Text, nullable=False)
+    result: Mapped[str] = mapped_column(Text, nullable=False)
+    before_state_json: Mapped[str | None] = mapped_column(Text)
+    after_state_json: Mapped[str | None] = mapped_column(Text)
+    raw_json: Mapped[str | None] = mapped_column(Text)
+    received_at: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
+
+
+class Observation(Base):
+    __tablename__ = "observation"
+    __table_args__ = (
+        UniqueConstraint("action_id", name="uq_observation_action"),
+        CheckConstraint(
+            "status IN ('open','window_complete','evaluated')", name="obs_status"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=new_id)
+    action_id: Mapped[str] = mapped_column(ForeignKey("action.id"), nullable=False)
+    window_start: Mapped[str] = mapped_column(Text, nullable=False)
+    window_end: Mapped[str] = mapped_column(Text, nullable=False)
+    baseline_json: Mapped[str] = mapped_column(Text, nullable=False)
+    post_data_json: Mapped[str | None] = mapped_column(Text)
+    concurrent_events_json: Mapped[str | None] = mapped_column(Text)
+    concurrent_actions_json: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="open")
+    created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
+    updated_at: Mapped[str] = mapped_column(Text, default=now_iso, onupdate=now_iso)
+
+
+class Evaluation(Base):
+    __tablename__ = "evaluation"
+    __table_args__ = (
+        UniqueConstraint("action_id", name="uq_evaluation_action"),
+        CheckConstraint(
+            "verdict IN ('valid','invalid','negative','insufficient_evidence')",
+            name="eval_verdict",
+        ),
+        CheckConstraint(
+            "evidence_strength IN ('strong','medium','weak')", name="eval_strength"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=new_id)
+    action_id: Mapped[str] = mapped_column(ForeignKey("action.id"), nullable=False)
+    observation_id: Mapped[str] = mapped_column(ForeignKey("observation.id"), nullable=False)
+    verdict: Mapped[str] = mapped_column(Text, nullable=False)
+    attribution_json: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_ids_json: Mapped[str | None] = mapped_column(Text)
+    maturity_note: Mapped[str | None] = mapped_column(Text)
+    evidence_strength: Mapped[str] = mapped_column(Text, nullable=False, default="medium")
+    rollback_suggested: Mapped[int] = mapped_column(default=0, nullable=False)
+    decided_by: Mapped[str] = mapped_column(Text, nullable=False)
+    decided_at: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
+
+
+class Experience(Base):
+    __tablename__ = "experience"
+    __table_args__ = (
+        UniqueConstraint("exp_code", name="uq_experience_code"),
+        CheckConstraint(
+            "status IN ('verified','pending_verification','failed')", name="exp_status"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=new_id)
+    exp_code: Mapped[str] = mapped_column(Text, nullable=False)
+    product_id: Mapped[str | None] = mapped_column(ForeignKey("product.id"))
+    scenario: Mapped[str] = mapped_column(Text, nullable=False)
+    original_problem: Mapped[str] = mapped_column(Text, nullable=False)
+    ai_judgment: Mapped[str | None] = mapped_column(Text)
+    operator_correction: Mapped[str | None] = mapped_column(Text)
+    actual_action: Mapped[str | None] = mapped_column(Text)
+    observation_result: Mapped[str | None] = mapped_column(Text)
+    evidence_strength: Mapped[str] = mapped_column(Text, nullable=False, default="medium")
+    applicable_when_json: Mapped[str | None] = mapped_column(Text)
+    not_applicable_when_json: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending_verification")
+    related_action_id: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, default=now_iso, nullable=False)
+    updated_at: Mapped[str] = mapped_column(Text, default=now_iso, onupdate=now_iso)
 
 
 # ---------------------------------------------------------------- 系统域
