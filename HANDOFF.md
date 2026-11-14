@@ -47,8 +47,8 @@
 ## NEXT_EXPECTED_STEP
 
 1. **阶段二开发**（按 PRD 第十章）：`analysis_run` + `evidence` 表迁移 → 分析上下文包生成（成熟度过滤 HR-01/02 强制）→ 建议校验器（方法论 enforcement=validator 的硬规则）→ T4 对应测试；
-2. **待 Gordon 决策**：①6978_6979 共用活动的 SKU 拆分口径（现挂 6978）②第 7 个零花费活动实名 ③SB 活动实名补录；
-3. **数据跟进**：采集含 6978/6979 活动的报表（当前样本不含，product 粒度出 0 行是真实结果非缺陷）；SB/SD 其他粒度报表到样即补指纹种子（O-2 剩余）；领星源适配器（D11）。
+2. ~~共用活动 SKU 拆分口径~~ **已解决（2026-11-14 Gordon 指示，依在营产品映射表）**：活动名前缀 = 后台 SKU 前缀 + KNGT；GJHIUBKNGT-* → GJHIUB-YCNGT-AA2-K（6978 黑青）→ 归属 6978。6979（前缀 GJHJUB/GJHJDG）现有数据无独立活动，其量在 6978 前缀活动内、按 advertised 粒度拆（阶段二）。已落档案 v2（backend_skus 全量）+ campaign_map 6 条 note 依据更新（`scripts/update_campaign_map_notes.py`）；
+3. **数据跟进**：①第 7 个零花费活动实名（W46 facts 折叠；若属 6978 按前缀规则应为 GJHIUBKNGT-*）与 SB 活动实名待后台核实 ②采集含 6978/6979 活动的昕信报表（当前样本实为约德账号，SKU 后缀 AtOZ1YODER 证实；product 粒度出 0 行是真实结果非缺陷）③SB/SD 其他粒度报表到样即补指纹种子（O-2 剩余）④领星源适配器（D11）。
 
 ## CONSTRAINTS
 
