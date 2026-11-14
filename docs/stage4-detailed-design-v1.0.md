@@ -10,7 +10,7 @@
 `tests/test_stage4_regression.py`（样本缺失自动 skip）：9 份真实样本走
 ingest → 质检判定 → canonical → facts → analysis context 全链，断言与已知事实一致：
 - 8 份英文报表 5 批 complete；3 份不支持源 failed（QF-01）
-- canonical/facts 行数与首次冒烟一致（8287 / 8499）
+- canonical/facts 行数与首次冒烟一致（8592 / 8499；8287 为早期文档笔误，回归核定值见 stage1-delivery §四勘误）
 - 上下文包结构完整（facts/方法论/档案/经验键齐全）
 回归失败 = 引擎行为漂移，禁止带病发布（PRD 红线）。
 

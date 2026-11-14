@@ -13,7 +13,7 @@
 | 导入管道 | file_hash 幂等（部分唯一索引：rejected 除外）、多文件共享批次（defer finalize）、文件落盘 `data/raw/<yyyy>/` | `test_t1_data_pollution.py` 5 用例 |
 | 质检 QF-01~10 | 文件级（01/02/03/04/05）+ 批级口径（06）+ supersede（08）+ 跨批跨源（07/09，容差 1%）+ 成熟度概览（10） | 各测试组覆盖，见 §四 |
 | 批次状态机 | 五态 `draft→identified→quality_running→{complete/partial/incomplete/needs_confirm/failed}`；error→failed、warn→needs_confirm 人工确认 | `batch_state.py` + T1/T2 用例 |
-| canonical 层 | 7 张 `can_*_daily`（amazon_console v1 适配器：英文 SP 全类型 + SB campaign；区间型报表挂起始日+attrs 标注；lineage 列名映射留痕） | 真实样本 canonical 8287 行 |
+| canonical 层 | 7 张 `can_*_daily`（amazon_console v1 适配器：英文 SP 全类型 + SB campaign；区间型报表挂起始日+attrs 标注；lineage 列名映射留痕） | 真实样本 canonical 8592 行（见 §四勘误） |
 | 事实层 | 6 粒度汇总（campaign/adgroup/target/searchterm/placement/product）；公式 ctr/cpc/cvr/acos/roas/cpa + computable 标记（分母零/缺源不估算）；成熟度行级标记（SP≥7/SB·SD≥14/混算从严/T-2 只挡延迟）；QF-10 | 真实样本 facts 8499 行；T2/T3 用例 |
 | 产品域 | product、档案 SCD-2（版本号+diff）、campaign_map（历史可追溯，Id/活动名双键匹配）、业务事件、关键词排名 | `test_profile_events.py` 5 用例 + `test_facts_product_grain.py` |
 | CLI | 15 命令全支持 `--json`（Q1 唯一接入面） | `ads --help`；全流程脚本跑通 |
