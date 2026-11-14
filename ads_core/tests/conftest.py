@@ -138,3 +138,89 @@ def ingest(env):
         return result
 
     return _ingest
+
+
+# ---------------------------------------------------------------- 阶段三链路共享 fixture
+
+@pytest.fixture()
+def approved_proposal(env):
+    """产品+档案+映射+事实+上下文+通过校验的建议+审批 → (proposal_id, approval_id)。"""
+    from datetime import date, timedelta
+
+    from ads_core.analysis import assemble_analysis_context, validate_proposals
+    from ads_core.canonical import build_canonical
+    from ads_core.decision import approve_proposal, submit_proposals
+    from ads_core.facts import build_facts
+    from ads_core.ingest.importer import ingest_file
+    from ads_core.profile import map_campaign, update_profile, upsert_product
+    from ads_core.storage import ImportBatch, MetricDaily, session_scope
+    from sqlalchemy import select
+
+    today = date(2026, 11, 14)
+    mature_day = (today - timedelta(days=20)).isoformat()
+
+    with session_scope() as s:
+        p = upsert_product(s, sku="6978", actor="test")
+        s.commit()
+        update_profile(
+            s, p.product_id,
+            {"A_basic": {"asin": "B0HB4XFV2F"}, "B_operations": {"target_acos": 0.25}},
+            reason="v1", changed_by="test",
+        )
+        s.commit()
+        map_campaign(s, campaign_id="29437742665971", product_id=p.product_id,
+                     mapped_by="test", campaign_name="GJHIUBKNGT-AZDAuto",
+                     ad_product_type="sp")
+        s.commit()
+
+    rows = sample_campaign_rows([mature_day], campaign_id="29437742665971")
+    for r in rows:
+        r["Campaign Name"] = "GJHIUBKNGT-AZDAuto"
+    f = make_report(env / "shared_camp.csv", "campaign", rows)
+    with session_scope() as s:
+        r = ingest_file(s, f, data_as_of=today.isoformat())
+        s.commit()
+    if r.status == "needs_confirm":
+        with session_scope() as s:
+            s.get(ImportBatch, r.batch_id).status = "complete"
+            s.commit()
+    with session_scope() as s:
+        build_canonical(s, r.batch_id, actor="test")
+        s.commit()
+    with session_scope() as s:
+        build_facts(s, grains=["campaign", "product"], actor="test")
+        s.commit()
+
+    with session_scope() as s:
+        run = assemble_analysis_context(
+            s, sku="6978",
+            date_from=(today - timedelta(days=40)).isoformat(),
+            date_to=today.isoformat(), actor="test",
+        )
+        s.commit()
+        fact = s.scalars(
+            select(MetricDaily).where(MetricDaily.grain == "campaign")
+        ).first()
+        proposal_dict = {
+            "sku": "6978", "target": "GJHIUBKNGT-AZDAuto",
+            "current_performance": "ACOS 30%", "problem": "高于目标",
+            "fact_evidence_ids": [fact.id], "event_evidence_ids": [],
+            "reasoning": "成熟期 ACOS 偏高",
+            "action": "adjust_bid", "adjustment": "-10%", "new_bid": 0.60,
+            "expected_effect": "ACOS 收敛至 25%", "risks": "无",
+            "observation_window": "7 天", "acceptance_criteria": "ACOS ≤ 25%",
+            "needs_approval": True,
+        }
+        verdicts = validate_proposals(s, run.run_id, [proposal_dict], actor="test")
+        s.commit()
+    assert verdicts[0].verdict == "passed", verdicts[0].violations
+
+    with session_scope() as s:
+        submitted = submit_proposals(s, run.run_id, actor="test")
+        s.commit()
+    assert len(submitted.created) == 1
+    proposal_id = submitted.created[0]
+    with session_scope() as s:
+        approval = approve_proposal(s, proposal_id, "approve", decided_by="Gordon")
+        s.commit()
+    return proposal_id, approval.id

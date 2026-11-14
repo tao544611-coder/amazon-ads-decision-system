@@ -50,7 +50,8 @@ profiles/6978_profile_v1.yaml、6979_profile_v1.yaml（O-4 初始档案）
 | test_facts_product_grain | 1 | campaign_name 双键映射 → product 粒度出数 |
 | test_calibration_real_samples | 9 | 真实样本表头（6 英文报表识别正确；领星中文×2+本地派生×1 必须 unknown） |
 
-**真实样本全流程**（`scripts/rebuild_dev_db.sh`）：9 份样本 → 5 批 complete（8287 canonical 行）+ 1 批 failed（3 份不支持源被 QF-01 拦截）→ facts 8499 行（成熟 7856 / 未成熟 643 = 7.57%，符合 2026-11-12 单日报表距取数日不足 7 天的事实）。
+**真实样本全流程**（`scripts/rebuild_dev_db.sh`）：9 份样本 → 5 批 complete（8592 canonical 行*）+ 1 批 failed（3 份不支持源被 QF-01 拦截）→ facts 8499 行（成熟 7856 / 未成熟 643 = 7.57%，符合 2026-11-12 单日报表距取数日不足 7 天的事实）。
+> *勘误（2026-11-14 阶段四回归核定）：本文早期版本写 8287 系汇总笔误，各批 canonical 实际输出 7781+2+73+337+306+93 = **8592**，回归测试锚点已按此固化。
 
 ## 五、已知问题
 

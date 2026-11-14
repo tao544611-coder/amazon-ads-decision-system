@@ -47,60 +47,6 @@ DATE_TO = TODAY.isoformat()
 CAMPAIGN = "GJHIUBKNGT-AZDAuto"
 
 
-@pytest.fixture()
-def approved_proposal(env):
-    """产品+档案+映射+事实+上下文+通过校验的建议+审批 → 返回 (proposal_id, approval_id)。"""
-    with session_scope() as s:
-        p = upsert_product(s, sku="6978", actor="test")
-        s.commit()
-        update_profile(
-            s, p.product_id,
-            {"A_basic": {"asin": "B0HB4XFV2F"}, "B_operations": {"target_acos": 0.25}},
-            reason="v1", changed_by="test",
-        )
-        s.commit()
-        map_campaign(s, campaign_id="29437742665971", product_id=p.product_id,
-                     mapped_by="test", campaign_name=CAMPAIGN, ad_product_type="sp")
-        s.commit()
-
-    rows = sample_campaign_rows([MATURE_DAY], campaign_id="29437742665971")
-    for r in rows:
-        r["Campaign Name"] = CAMPAIGN
-    f = make_report(env / "s3_camp.csv", "campaign", rows)
-    with session_scope() as s:
-        r = ingest_file(s, f, data_as_of=AS_OF)
-        s.commit()
-    if r.status == "needs_confirm":
-        with session_scope() as s:
-            s.get(ImportBatch, r.batch_id).status = "complete"
-            s.commit()
-    with session_scope() as s:
-        build_canonical(s, r.batch_id, actor="test")
-        s.commit()
-    with session_scope() as s:
-        build_facts(s, grains=["campaign", "product"], actor="test")
-        s.commit()
-
-    with session_scope() as s:
-        run = assemble_analysis_context(
-            s, sku="6978", date_from=DATE_FROM, date_to=DATE_TO, actor="test",
-        )
-        s.commit()
-    fact_id = _fact_id()
-    with session_scope() as s:
-        verdicts = validate_proposals(s, run.run_id, [_proposal(fact_id)], actor="test")
-        s.commit()
-    assert verdicts[0].verdict == "passed", verdicts[0].violations
-
-    with session_scope() as s:
-        submitted = submit_proposals(s, run.run_id, actor="test")
-        s.commit()
-    assert len(submitted.created) == 1
-    proposal_id = submitted.created[0]
-    with session_scope() as s:
-        approval = approve_proposal(s, proposal_id, "approve", decided_by="Gordon")
-        s.commit()
-    return proposal_id, approval.id
 
 
 def _fact_id() -> str:

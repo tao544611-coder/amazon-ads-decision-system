@@ -47,6 +47,7 @@ action_app = typer.Typer(help="广告动作")
 observation_app = typer.Typer(help="观察窗口")
 evaluation_app = typer.Typer(help="效果验收")
 experience_app = typer.Typer(help="经验库")
+mcp_app = typer.Typer(help="MCP Server（阶段五）")
 app.add_typer(methodology_app, name="methodology")
 app.add_typer(batch_app, name="batch")
 app.add_typer(quality_app, name="quality")
@@ -60,6 +61,7 @@ app.add_typer(action_app, name="action")
 app.add_typer(observation_app, name="observation")
 app.add_typer(evaluation_app, name="evaluation")
 app.add_typer(experience_app, name="experience")
+app.add_typer(mcp_app, name="mcp")
 
 JSON_OPT = Annotated[bool, typer.Option("--json", help="以 JSON 输出结果")]
 
@@ -899,6 +901,76 @@ def experience_list(status: Optional[str] = typer.Option(None, "--status"), json
             for e in s.scalars(stmt).all()
         ]
     _emit({"experiences": rows, "count": len(rows)}, json_out)
+
+
+# ---------------------------------------------------------------- 阶段四：评估统计 / 经验草稿
+
+
+@evaluation_app.command("stats")
+def evaluation_stats_cmd(
+    date_from: Optional[str] = typer.Option(None, "--from"),
+    date_to: Optional[str] = typer.Option(None, "--to"),
+    json_out: JSON_OPT = False,
+) -> None:
+    """建议准确性统计（verdict 分布 / 有效率 / 证据不足占比）。"""
+    from .decision.stats import evaluation_stats
+
+    with session_scope() as s:
+        st = evaluation_stats(s, date_from, date_to)
+    _emit({
+        "total": st.total, "by_verdict": st.by_verdict,
+        "effective_rate": st.effective_rate,
+        "insufficient_ratio": st.insufficient_ratio,
+        "rollback_suggested": st.rollback_suggested,
+        "by_action_type": st.by_action_type, "by_sku": st.by_sku,
+    }, json_out)
+
+
+@experience_app.command("draft")
+def experience_draft(
+    evaluation_id: str,
+    by: str = typer.Option(..., "--by"),
+    json_out: JSON_OPT = False,
+) -> None:
+    """验收结果一键转经验草稿（审核后改 verified/failed）。"""
+    from .decision.stats import evaluation_to_experience_draft
+
+    try:
+        with session_scope() as s:
+            exp = evaluation_to_experience_draft(s, evaluation_id, created_by=by)
+            s.commit()
+        _emit({"exp_code": exp.exp_code, "status": exp.status,
+               "related_action": exp.related_action_id}, json_out)
+    except ValueError as exc:
+        _emit({"error": str(exc)}, json_out)
+        raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------- 阶段五：MCP
+
+
+@mcp_app.command("serve")
+def mcp_serve(
+    permissions: str = typer.Option("read", "--permissions", help="逗号分隔：read,analysis,data"),
+) -> None:
+    """启动 stdio MCP 服务（保持前台运行，由 Harness 拉起）。"""
+    from .mcp_server import serve
+
+    perms = [p.strip() for p in permissions.split(",") if p.strip()]
+    serve(perms)
+
+
+@mcp_app.command("list-tools")
+def mcp_list_tools(
+    permissions: str = typer.Option("read", "--permissions"),
+    json_out: JSON_OPT = False,
+) -> None:
+    """本地自检：该权限级别将注册的 MCP 工具。"""
+    from .mcp_server import list_tools
+
+    perms = [p.strip() for p in permissions.split(",") if p.strip()]
+    tools = list_tools(perms)
+    _emit({"permissions": perms, "tools": tools, "count": len(tools)}, json_out)
 
 
 # ---------------------------------------------------------------- audit

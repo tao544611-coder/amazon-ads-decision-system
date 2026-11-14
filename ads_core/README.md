@@ -49,8 +49,9 @@ cd ads_core
 | `ads proposal submit/list/approve` | 提案管理（人工审批，审批与执行分离 T6） |
 | `ads action create/list/receipt/rollback` | 动作管理（幂等 T8 · simulated/manual 模式 · 回滚留痕） |
 | `ads observation create/complete` | 观察窗口（F5：max(验证窗, 归因满窗) + 同期干扰自动拉取） |
-| `ads evaluation record` | 效果验收（四裁决 + 归因分层，T7） |
-| `ads experience add/search/list` | 经验库（FTS5 中文检索 · 失败经验保留） |
+| `ads evaluation record / stats` | 效果验收（四裁决 + 归因分层，T7）· 建议准确性统计 |
+| `ads experience add/search/list/draft` | 经验库（FTS5 中文检索 · 失败经验保留 · 验收转草稿） |
+| `ads mcp serve / list-tools` | MCP Server（stdio · read/analysis/data 三级权限 · 调用留痕） |
 | `ads audit [n]` | 审计流水 |
 
 ## 目录
