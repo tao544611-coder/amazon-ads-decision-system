@@ -1,6 +1,6 @@
 # Amazon Ads Decision System（亚马逊广告智能优化与决策系统）
 
-版本 **v0.1** ｜ Python 3.12 ｜ SQLite + Alembic ｜ 测试 135 用例全绿
+版本 **v0.11** ｜ Python 3.12 ｜ SQLite + Alembic ｜ 测试 135 用例全绿
 
 一套**引擎确定性、判断可追溯**的亚马逊广告决策链系统：数据采集 → 统一层 → 事实层 → 分析上下文 → AI 建议 → 三关校验 → 人工审批 → 执行回执 → 观察验收 → 经验沉淀。AI 只出建议，引擎管事实与护栏，**每一笔改动都可从建议追溯到执行回执**。
 
@@ -57,6 +57,6 @@ MCP 接入：`ads mcp serve --permissions read,analysis`（三级 read/analysis/
 
 ## 版本
 
-- **feature/lingxing-json-adapter**（2026-11-15）：D11 二期——领星 MCP JSON 适配器（`lingxing_mcp_json`）：按日拉取的 MCP 响应 JSON 直接入库（reader 支持 json + 指纹变体 + QF-02/_data_dates 校准 + MCP source_system 参数）；窗口聚合 JSON 显式拒绝（PRD 红线不虚构日期）；真实存档 e2e 与 CSV 路径锚点零差异；新增 10 项测试，累计 135 用例。详见 `docs/d11-2-json-adapter.md`。
+- **v0.11**（2026-11-15）：D11 二期——领星 MCP JSON 适配器（`lingxing_mcp_json`）：按日拉取的 MCP 响应 JSON 直接入库（reader 支持 json + 指纹变体 + QF-02/_data_dates 校准 + MCP source_system 参数）；窗口聚合 JSON 显式拒绝（PRD 红线不虚构日期）；真实存档 e2e 与 CSV 路径锚点零差异；新增 10 项测试，累计 135 用例。详见 `docs/d11-2-json-adapter.md`。
 - **fix/decision-defects-20261114**（2026-11-14）：缺陷修复——P0-01 观察窗 SKU 数据隔离（product_id 归属过滤 + 归属不明标注，多 SKU 动作须逐 SKU 拆分）、P0-02 同期动作识别（窗口 [start,end] 边界 + executed 状态闸门）、P1-01 指标引用显式声明（metrics_referenced，出价三值 current_bid/target_bid/adjustment_pct 拆分）、P1-02 HR-08/09 与 YAML 例外语义对齐（不改已发布 v1.0.0 业务含义）、P1-03 审批身份标记（005 迁移：approval_channel/identity_verified）与记录层回滚语义；新增 36 项测试 + 6978/6979 真实数据验证。详见 `docs/defect-fix-20261114.md`。
 - **v0.1**（2026-11-14）：五阶段引擎交付——T1~T8 引擎侧 78 用例 + D11 一期（领星 ERP 适配 / MCP 补充证据）+ Web 审批门 + 领星执行通道实测通过，累计 89 用例。
