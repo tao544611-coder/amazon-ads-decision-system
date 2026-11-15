@@ -70,7 +70,10 @@ def _data_dates(table: TableData) -> tuple[str | None, str | None, int]:
     if table.rows:
         first = table.rows[0]
         norm = {normalize_header(k): v for k, v in first.items()}
-        col = next((c for c in ("date", "start date", "开始日期", "日期") if norm.get(c)), None)
+        col = next(
+            (c for c in ("date", "start date", "report date", "开始日期", "日期") if norm.get(c)),
+            None,
+        )
         if col:
             for row in table.rows:
                 v = {normalize_header(k): v for k, v in row.items()}.get(col, "")

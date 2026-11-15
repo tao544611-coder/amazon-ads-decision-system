@@ -299,15 +299,23 @@ def build_server(permissions: list[str] | None = None) -> FastMCP:
             ad_product_type: str = "sp",
             forced_type: Optional[str] = None,
             imported_by: str = "mcp",
+            source_system: str = "amazon_console",
         ) -> str:
-            """导入报表文件（file_hash 幂等；写操作）。"""
+            """导入报表文件（file_hash 幂等；写操作）。
+
+            source_system：amazon_console（后台 bulk CSV/XLSX）| lingxing_erp（领星中文周报
+            XLSX）| lingxing_mcp_json（领星 MCP JSON 响应，D11 二期：仅日粒度行，
+            窗口聚合 JSON 会被明确拒绝）。
+            """
             from .ingest import ingest_file as _ingest
 
-            _audit("ingest_file", {"file_path": file_path, "ad_product_type": ad_product_type})
+            _audit("ingest_file", {"file_path": file_path, "ad_product_type": ad_product_type,
+                                   "source_system": source_system})
             try:
                 with session_scope() as s:
                     r = _ingest(
                         s, file_path, imported_by=imported_by,
+                        source_system=source_system,
                         ad_product_type=ad_product_type, forced_type=forced_type,
                     )
                     s.commit()

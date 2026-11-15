@@ -56,7 +56,8 @@ def _business_key_for(report_type: str, row: dict[str, str]) -> str:
     adgroup = _first_col(row, ["ad group id", "ad group name", "广告组"])
     target = _first_col(row, ["keyword or product targeting", "targeting", "投放"])
     # 校准（O-1 增补 2）：日期列含领星中文「日期」（importer._data_dates 已同权支持）
-    date_val = _first_col(row, ["date", "start date", "日期"])
+    # 校准（D11 二期，2026-11-15）：领星 MCP JSON 的日粒度日期键 = report_date
+    date_val = _first_col(row, ["date", "start date", "report date", "日期"])
     key_cols = {
         "campaign": [date_val, campaign],
         "adgroup": [date_val, campaign, adgroup],

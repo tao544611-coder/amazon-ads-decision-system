@@ -141,6 +141,21 @@ report_variants:
       - any_of: ["匹配方式"]
     negative: []
 
+  # D11 二期（2026-11-15）：领星 MCP JSON 响应 · 按日拉取的活动报表
+  # （ad_sp_campaign_report：行含 report_date/campaign_id/cost/sales，无 campaign_name，
+  #   归属靠 CampaignMap 按 campaign_id 登记）。窗口聚合 JSON（无任何日期键）不满足
+  #   日期组 → unknown → 拒绝入库（适配器行级再兜底显式拒绝，PRD 红线不虚构日期）。
+  lingxing_mcp_daily_campaign:
+    maps_to: campaign
+    required:
+      - any_of: ["report date", "date"]
+      - any_of: ["campaign id", "campaign name"]
+      - all_of: ["impressions", "clicks"]
+      - any_of: ["cost", "spend"]
+    distinguishing:
+      - any_of: ["profile id", "same orders", "same sales", "same units"]
+    negative: []
+
 # 置信阈值（设计 §2.3；无区分列配置的类型区分项视为满足，见 detector.py 实现注记）
 confidence_threshold: 0.85
 margin: 0.1

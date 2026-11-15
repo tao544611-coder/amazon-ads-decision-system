@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""表格读取：xlsx（openpyxl）与 csv（utf-8-sig，R7）。"""
+"""表格读取：xlsx（openpyxl）、csv（utf-8-sig，R7）与 json（领星 MCP 响应，D11 二期）。"""
 
 from __future__ import annotations
 
 import csv
+import json
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -26,7 +27,9 @@ def read_table(path: str | Path) -> TableData:
         return _read_csv(p)
     if p.suffix.lower() in {".xlsx", ".xlsm"}:
         return _read_xlsx(p)
-    raise ValueError(f"不支持的文件类型：{p.suffix}（支持 xlsx/csv）")
+    if p.suffix.lower() == ".json":
+        return _read_json(p)
+    raise ValueError(f"不支持的文件类型：{p.suffix}（支持 xlsx/csv/json）")
 
 
 def _cell_str(value: object) -> str:
@@ -79,6 +82,51 @@ def _read_xlsx(p: Path) -> TableData:
             continue
         row = {headers[i]: raw[i] if i < len(raw) else "" for i in range(len(headers))}
         data.rows.append(row)
+    return data
+
+
+def _find_json_rows(obj: object) -> list[dict]:
+    """在 JSON 结构中定位行列表（D11 二期）。
+
+    支持三种形态（宁缺勿猜，找不到行列表返回空）：
+    - 领星 MCP 原始响应：``{"code":1,"data":{"data":[...],"recordsFiltered":N},...}``
+      （兼容 ``data.list`` / ``data.records``）；
+    - 存档形态：``{"provenance":...,"rows":[...]}``（顶层 ``rows`` / ``records``）；
+    - 顶层即行数组。
+    """
+    if isinstance(obj, list):
+        return [r for r in obj if isinstance(r, dict)]
+    if isinstance(obj, dict):
+        candidates = [obj]
+        inner = obj.get("data")
+        if isinstance(inner, dict):
+            candidates.append(inner)
+        for holder in candidates:
+            for key in ("rows", "data", "list", "records"):
+                v = holder.get(key)
+                if isinstance(v, list) and all(isinstance(r, dict) for r in v):
+                    return v
+    return []
+
+
+def _read_json(p: Path) -> TableData:
+    """JSON 行式数据读取：行列表 → TableData（键为列名，值字符串化，None → 空串）。"""
+    with p.open("r", encoding="utf-8") as f:
+        try:
+            obj = json.load(f)
+        except ValueError as exc:
+            raise ValueError(f"JSON 无法解析：{p.name}（{exc}）") from exc
+    rows_native = _find_json_rows(obj)
+    if not rows_native:
+        return TableData()
+    headers: list[str] = []
+    for r in rows_native:
+        for k in r.keys():
+            if k not in headers:
+                headers.append(k)
+    data = TableData(headers=headers)
+    for r in rows_native:
+        data.rows.append({h: _cell_str(r.get(h)) for h in headers})
     return data
 
 

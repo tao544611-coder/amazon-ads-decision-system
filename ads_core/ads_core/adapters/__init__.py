@@ -4,10 +4,12 @@
 from .amazon_console import AmazonConsoleAdapter
 from .base import AdapterError, CanonicalRow, SourceAdapter
 from .lingxing_erp import LingXingErpAdapter
+from .lingxing_mcp_json import LingXingMcpJsonAdapter
 
 ADAPTERS: dict[str, type[SourceAdapter]] = {
     "amazon_console": AmazonConsoleAdapter,
     "lingxing_erp": LingXingErpAdapter,
+    "lingxing_mcp_json": LingXingMcpJsonAdapter,
 }
 
 __all__ = [
@@ -17,4 +19,5 @@ __all__ = [
     "SourceAdapter",
     "AmazonConsoleAdapter",
     "LingXingErpAdapter",
+    "LingXingMcpJsonAdapter",
 ]
