@@ -53,7 +53,7 @@ MCP 接入：`ads mcp serve --permissions read,analysis`（三级 read/analysis/
 
 - **真实经营数据不入库**：`data/`、`samples/`、样本包目录全量 gitignore，密钥永不进代码/提交/日志。
 - 仓库内文档与测试已脱敏：真实店铺别名、领星 sid/profile、ASIN、活动 ID 均替换为占位值（`B0TEST****`、`TESTNGT-*`、`111111…`）。
-- 产品档案（profiles/）与本地交接笔记（HANDOFF.md）含经营细节，仅存本地不入库。
+- 产品档案（profiles/）含经营细节，仅存本地不入库。
 
 ## 版本
 
